@@ -224,7 +224,9 @@ The website’s source is kept separately.
 
 ## Licence
 
-The source code is under the [MIT License](LICENSE). The sounds, logos, icon, artwork and design are **not**: all rights reserved, see [LICENSE-ASSETS.md](LICENSE-ASSETS.md). To share your own version, replace them with your own.
+The code is under the [MIT License](LICENSE). Only the sound effects are reserved: see [LICENSE-ASSETS.md](LICENSE-ASSETS.md).
+
+The logo design, animations and transitions are our own work; only the logo design is inspired by Apple. Others can use them too.
 
 Third-party parts keep their own licences: [ThirdParty/NOTICES.md](ThirdParty/NOTICES.md).
 
