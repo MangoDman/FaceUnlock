@@ -474,7 +474,16 @@ final class PipelineTests: XCTestCase {
         for effect in SoundEffect.allCases {
             let url = try XCTUnwrap(effect.url, "\(effect.rawValue).wav is missing")
             let player = try AVAudioPlayer(contentsOf: url)
-            XCTAssertLessThan(player.duration, 1.5, "\(effect.rawValue) is too long for an effect")
+            XCTAssertLessThan(player.duration, 2.6, "\(effect.rawValue) is too long for an effect")
+            XCTAssertEqual(player.numberOfChannels, 2)
         }
+    }
+
+    @MainActor func testTheNotchChoosesTheSoundForWhatItShows() {
+        XCTAssertEqual(NotchPresenter.sound(for: .scanning, after: .closed), .open)
+        XCTAssertEqual(NotchPresenter.sound(for: .success(nil), after: .scanning), .unlock)
+        XCTAssertEqual(NotchPresenter.sound(for: .failure("No"), after: .scanning), .failure)
+        XCTAssertNil(NotchPresenter.sound(for: .scanning, after: .scanning))
+        XCTAssertNil(NotchPresenter.sound(for: .closed, after: .success(nil)))
     }
 }

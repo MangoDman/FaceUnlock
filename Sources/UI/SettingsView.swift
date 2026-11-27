@@ -766,7 +766,7 @@ struct SettingsView: View {
                     .fixedSize()
                 }
             }
-            toggle("Haptic Tap on Unlock", "hand.tap", $app.hapticOnUnlock)
+            toggle("Haptic Feedback", "hand.tap", $app.hapticOnUnlock)
         }
         Section {
             Picker("Alerts appear in", selection: $app.alertStyle) {

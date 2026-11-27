@@ -72,8 +72,12 @@ final class SetupModel {
                     }
                     if let samePerson { templates.append(samePerson) }
                     progressAt = time
-                    NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
-                    if next.phase != .complete { Sounds.play(.capture) }
+                    // Each side climbs a step. The last frame is announced by the finish.
+                    if next.phase != .complete {
+                        let steps: [SoundEffect] = [.tap, .capture1, .capture2, .capture3, .capture4]
+                        let isNewSide = next.captured.count > machine.captured.count
+                        Sounds.play(isNewSide ? steps[min(next.captured.count, 4)] : .tap)
+                    }
                 }
                 machine = next
 

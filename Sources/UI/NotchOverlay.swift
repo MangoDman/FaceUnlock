@@ -331,7 +331,7 @@ struct NotchView: View {
         guard hovering != state.hovering else { return }
         state.hovering = hovering
         guard hovering else { return }
-        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
+        Sounds.play(.hover)
         state.onHover?()
     }
 
@@ -567,7 +567,10 @@ struct NotchView: View {
     }
 
     private func capsule(_ label: String, fill: Color, ink: Color, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+        Button {
+            Sounds.play(.tap)
+            action()
+        } label: {
             Text(label).font(.system(size: 14, weight: .semibold)).foregroundStyle(ink)
                 .frame(maxWidth: .infinity).frame(height: 38)
                 .background(fill, in: Capsule())
@@ -663,15 +666,19 @@ final class NotchPresenter {
         collapseTask?.cancel()
         if case .success(nil) = phase { EventLog.write("Notch: success animation") }
         let wasVisible = panel?.isVisible ?? false
+        // The sound starts with the animation it was composed for.
+        let sound = Self.sound(for: phase, after: wasVisible ? state.phase : .closed)
         present()
         if wasVisible {
             state.phase = phase
             updateInteractivity()
+            if let sound { Sounds.play(sound) }
         } else {
             // Draw one closed frame first so the opening spring has somewhere to start.
             DispatchQueue.main.async { [self] in
                 state.phase = phase
                 updateInteractivity()
+                if let sound { Sounds.play(sound) }
             }
         }
         if let text = phase.announcement {
@@ -679,6 +686,20 @@ final class NotchPresenter {
                                  userInfo: [.announcement: text])
         }
         if let duration { collapse(after: duration) }
+    }
+
+    static func sound(for phase: NotchState.Phase, after previous: NotchState.Phase) -> SoundEffect? {
+        // Showing the same thing again animates nothing, so says nothing.
+        guard phase != previous else { return nil }
+        return switch phase {
+        case .scanning: .open
+        case .success: .unlock
+        case .failure: .failure
+        case .passwordRequired, .prompt: .password
+        case .notice: .notice
+        case .hint: .tap
+        case .closed: nil
+        }
     }
 
     /// How long success stays up before the screen is unlocked: the ring and tick take 0.56 s
@@ -696,6 +717,7 @@ final class NotchPresenter {
         collapseTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(delay))
             guard !Task.isCancelled, let self else { return }
+            if case .success = state.phase { Sounds.play(.retract) }
             state.phase = .closed
             updateInteractivity()
             guard !armed else { return }

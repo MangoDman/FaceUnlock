@@ -17,7 +17,7 @@ struct NotchStylePicker: View {
     private func choose(_ index: Int) {
         guard index != selected || app.notchStyle == .automatic else { return }
         app.notchStyle = Self.styles[index].0
-        NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+        Sounds.play(.hover)
         app.preview(.unlock)
     }
 

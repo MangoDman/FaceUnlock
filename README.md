@@ -85,7 +85,7 @@ Not confirmed: photo and video attempts against the liveness checks (tested on s
 
 ## Sounds
 
-Short effects for looking, unlocking, locking, refusals, alerts and setup, synthesised by `Tools/make_sounds.py` (no recordings). Turn them off or change the volume in **Settings → Alerts & Sounds**.
+Stereo effects for the notch opening and closing, unlocking, locking, refusals, alerts and setup, synthesised by `Tools/make_sounds.py` (no recordings). Their timing and the trackpad taps follow the animations. Turn them or the haptics off in **Settings → Alerts & Sounds**.
 
 ## Privacy
 
