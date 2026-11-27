@@ -224,7 +224,7 @@ The website’s source is kept separately.
 
 ## Licence
 
-The source code is under the [MIT License](LICENSE). The sounds, name, logos, icon, artwork and design are **not**: all rights reserved, see [LICENSE-ASSETS.md](LICENSE-ASSETS.md). To share your own version, replace them with your own.
+The source code is under the [MIT License](LICENSE). The sounds, logos, icon, artwork and design are **not**: all rights reserved, see [LICENSE-ASSETS.md](LICENSE-ASSETS.md). To share your own version, replace them with your own.
 
 Third-party parts keep their own licences: [ThirdParty/NOTICES.md](ThirdParty/NOTICES.md).
 
