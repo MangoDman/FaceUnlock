@@ -135,6 +135,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             return
         }
         #endif
+        // One copy only: two at once is how a permission ends up given to the wrong one.
+        let mine = NSRunningApplication.current
+        for other in NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "")
+        where other != mine {
+            other.terminate()
+        }
         model.start()
         // Opened for you when something is missing, so there's nothing to hunt for.
         if !Screen.isLocked, model.needsPermissionsAttention { showPermissions() }

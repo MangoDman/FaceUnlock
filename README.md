@@ -78,8 +78,9 @@ There is no public island API, so it is detected from the built-in display repor
 ## Install
 
 1. Open `FaceUnlock.dmg` and drag FaceUnlock to Applications.
-2. Open it once. macOS blocks it because it isn’t notarized by Apple.
+2. Open it. macOS warns you because it isn’t notarized by Apple. Click **Done**, **not Move to Trash**.
 3. In **System Settings → Privacy & Security**, scroll down and click **Open Anyway**.
+4. FaceUnlock opens its **Permissions** page. Work down the list. macOS never grants these by itself: you allow the camera with one click and switch Accessibility on yourself.
 
 Only do this for software you trust, or [build it yourself](#build-from-source).
 

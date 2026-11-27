@@ -1,4 +1,5 @@
 import AppKit
+import AVFoundation
 import CoreImage
 import LocalAuthentication
 import Observation
@@ -197,6 +198,8 @@ final class AppModel {
 
     /// macOS would ask before handing over something saved, which can't happen at the lock screen.
     private(set) var needsKeychainAccess = false
+    private var askedForKeychain = false
+    private var clearedPermissions: Set<String> = []
 
     /// What stands between you and a face unlock, most pressing first. The status line says it,
     /// and the button beside it fixes it.
@@ -335,6 +338,15 @@ final class AppModel {
         notch.state.onConfirm = { [weak self] in self?.confirmWithTouchID() }
         notch.state.onDismiss = { [weak self] in self?.notch.collapse() }
 
+        // Coming back from System Settings: look again straight away.
+        NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil,
+                                               queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.recheckKeychain()
+                self?.refresh()
+            }
+        }
+
         let center = DistributedNotificationCenter.default()
         func observe(_ name: String, _ action: @escaping @MainActor (AppModel) -> Void) {
             center.addObserver(forName: .init(name), object: nil, queue: .main) { [weak self] _ in
@@ -371,8 +383,12 @@ final class AppModel {
     }
 
     func refresh() {
-        cameraAuthorized = CameraService.isAuthorized
-        accessibilityTrusted = PasswordTyper.isTrusted
+        let camera = CameraService.isAuthorized, accessibility = PasswordTyper.isTrusted
+        // Written down, so "no tick" can be checked against what macOS actually said.
+        if camera != cameraAuthorized { EventLog.write("Camera allowed: \(camera)") }
+        if accessibility != accessibilityTrusted { EventLog.write("Accessibility allowed: \(accessibility)") }
+        cameraAuthorized = camera
+        accessibilityTrusted = accessibility
         hasPassword = PasswordVault.hasPassword
         passwordRequiredReason = policy.passwordRequired(at: .now)
     }
@@ -472,12 +488,14 @@ final class AppModel {
 
     func allowCamera() {
         Task {
-            var allowed = await CameraService.requestAccess()
-            if !allowed {
-                await forgetPermission("Camera")
-                allowed = await CameraService.requestAccess()
+            let before = AVCaptureDevice.authorizationStatus(for: .video)
+            if before == .notDetermined { _ = await CameraService.requestAccess() }
+            if !CameraService.isAuthorized {
+                // Never answered, or answered for an earlier version: clear that and ask afresh.
+                let stale = before != .notDetermined || AVCaptureDevice.authorizationStatus(for: .video) == .notDetermined
+                if stale, await forgetPermission("Camera") { _ = await CameraService.requestAccess() }
+                if !CameraService.isAuthorized { openPrivacySettings("Privacy_Camera") }
             }
-            if !allowed { openPrivacySettings("Privacy_Camera") }
             refresh()
         }
     }
@@ -485,7 +503,7 @@ final class AppModel {
     func allowAccessibility() {
         Task {
             if !PasswordTyper.isTrusted {
-                await forgetPermission("Accessibility")
+                _ = await forgetPermission("Accessibility")
                 // Puts FaceUnlock in the list, ready to be switched on.
                 PasswordTyper.requestTrust()
                 openPrivacySettings("Privacy_Accessibility")
@@ -506,8 +524,9 @@ final class AppModel {
     /// After an update macOS can hold a permission for the previous copy: it looks switched on
     /// but isn't. Clearing FaceUnlock's own entry lets macOS ask properly. This only takes access
     /// away; giving it is still up to you.
-    private func forgetPermission(_ service: String) async {
-        guard let identifier = Bundle.main.bundleIdentifier else { return }
+    /// Once per run only. A second click must never take away what was just switched on.
+    private func forgetPermission(_ service: String) async -> Bool {
+        guard let identifier = Bundle.main.bundleIdentifier, clearedPermissions.insert(service).inserted else { return false }
         await Task.detached {
             let reset = Process()
             reset.executableURL = URL(filePath: "/usr/bin/tccutil")
@@ -516,6 +535,13 @@ final class AppModel {
             reset.waitUntilExit()
         }.value
         EventLog.write("Cleared the old \(service) permission before asking again")
+        return true
+    }
+
+    /// macOS only remembers permissions properly for a copy in Applications.
+    var isInApplications: Bool {
+        let path = Bundle.main.bundlePath
+        return path.hasPrefix("/Applications/") || path.hasPrefix(NSHomeDirectory() + "/Applications/")
     }
 
     private func openPrivacySettings(_ section: String) {
@@ -535,8 +561,19 @@ final class AppModel {
 
     /// Looks, without asking anything, whether everything saved can be read.
     private func checkKeychain() {
-        needsKeychainAccess = store.needsPermission || PasswordVault.needsPermission || SecurityStore.needsPermission
-        if needsKeychainAccess { EventLog.write("Keychain access needed: choose Always Allow when macOS asks") }
+        let needed = store.needsPermission || PasswordVault.needsPermission || SecurityStore.needsPermission
+        if needed != needsKeychainAccess {
+            EventLog.write(needed ? "Keychain access needed: choose Always Allow when macOS asks" : "Keychain access allowed")
+        }
+        needsKeychainAccess = needed
+    }
+
+    /// For the Permissions page: notices when access was given since the last look.
+    func recheckKeychain() {
+        guard needsKeychainAccess, !Screen.isLocked else { return }
+        checkKeychain()
+        if !needsKeychainAccess, enrollment.primary.isEmpty { enrollment = store.load() }
+        refresh()
     }
 
     /// Lets macOS show its prompts. Only ever at the desktop, where they can be seen.
@@ -773,7 +810,11 @@ final class AppModel {
         // A typing failure found at the lock screen is explained once you're back.
         Task {
             try? await Task.sleep(for: .seconds(1.5))
-            if needsKeychainAccess { requestKeychainAccess() }
+            // Once. After that it waits for the Allow button rather than asking at every unlock.
+            if needsKeychainAccess, !askedForKeychain {
+                askedForKeychain = true
+                requestKeychainAccess()
+            }
             promptIfNeeded()
         }
     }

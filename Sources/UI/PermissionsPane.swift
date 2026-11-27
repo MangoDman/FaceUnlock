@@ -10,6 +10,12 @@ struct PermissionsPane: View {
     var body: some View {
         @Bindable var app = app
         Group {
+            if !app.isInApplications {
+                Section {
+                    Label("Move FaceUnlock to Applications, then open it from there. macOS won’t remember permissions for this copy.",
+                          systemImage: "exclamationmark.triangle.fill")
+                }
+            }
             Section {
                 Label {
                     Text(app.stepsLeft == 0 && app.needsAuthentication ? "Last step: confirm with Touch ID."
@@ -77,6 +83,7 @@ struct PermissionsPane: View {
         // Ticks appear as soon as something is switched on in System Settings.
         .task {
             while !Task.isCancelled {
+                app.recheckKeychain()
                 app.refresh()
                 await app.refreshNotificationStatus()
                 try? await Task.sleep(for: .seconds(1))
