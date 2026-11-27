@@ -37,7 +37,7 @@
 - [Build from source](#build-from-source)
 - [Project layout](#project-layout)
 - [Status](#status)
-- [Licence](#licence)
+- [Credits and licence](#credits-and-licence)
 
 ## Features
 
@@ -222,12 +222,28 @@ The website’s source is kept separately.
 
 **Not confirmed:** photo and video attempts against the liveness checks (tested on simulated data only), the Maximum challenge, the head-turn setup scan, glasses and hat scans, another person, dim light, lock-when-you-leave, a real time-limit expiry, Intel Macs, and Macs without a notch or with a Dynamic Island. Masks are not supported.
 
-## Licence
+## Credits and licence
 
-The code is under the [MIT License](LICENSE). Only the sound effects are reserved: see [LICENSE-ASSETS.md](LICENSE-ASSETS.md).
+### With thanks
 
-The logo design, animations and transitions are our own work; only the logo design is inspired by Apple. Others can use them too.
+FaceUnlock is inspired by Apple’s “Unlock with Front Camera” feature on iPhone Duo. It is an independent project: it is not made by, endorsed by or affiliated with Apple.
 
-Third-party parts keep their own licences: [ThirdParty/NOTICES.md](ThirdParty/NOTICES.md).
+“Face unlock” is a common term for unlocking a device with your face. We don’t claim exclusive rights to those words, and this FaceUnlock is not connected with other apps that share the name. Its home is [faceunlock.app](https://faceunlock.app).
 
-Not made by or affiliated with Apple. Apple, Mac, Face ID and Touch ID are Apple trademarks. Apple icons and artwork shown in the website and app belong to Apple, and other app icons to their owners.
+### What you may use
+
+| Part | Terms |
+|---|---|
+| Source code | Free to use, change and share under the [MIT License](LICENSE) |
+| Sounds | Reserved. Not to be copied or shared without written permission ([details](LICENSE-ASSETS.md)) |
+| Logo design, animations and transitions | Our own work; only the logo design is inspired by Apple. No rights reserved, and others can use them too |
+
+### Third-party work
+
+- Face recognition uses the [SFace model](https://huggingface.co/opencv/face_recognition_sface) from OpenCV Zoo, under Apache 2.0.
+- The app can load an [anti-spoofing model](https://github.com/facenox/face-antispoof-onnx), which is not included in this repository or the download.
+- Full notices: [ThirdParty/NOTICES.md](ThirdParty/NOTICES.md).
+
+Apple, Mac, iPhone, Face ID and Touch ID are Apple trademarks. Apple icons and artwork shown in the website and app belong to Apple, and other app icons to their owners.
+
+The same credits are on [faceunlock.app/licence](https://faceunlock.app/licence.html).
