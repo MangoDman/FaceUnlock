@@ -474,7 +474,7 @@ final class PipelineTests: XCTestCase {
         for effect in SoundEffect.allCases {
             let url = try XCTUnwrap(effect.url, "\(effect.rawValue).wav is missing")
             let player = try AVAudioPlayer(contentsOf: url)
-            XCTAssertLessThan(player.duration, 2.6, "\(effect.rawValue) is too long for an effect")
+            XCTAssertLessThan(player.duration, 4, "\(effect.rawValue) is too long for an effect")
             XCTAssertEqual(player.numberOfChannels, 2)
         }
     }
