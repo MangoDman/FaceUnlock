@@ -423,6 +423,7 @@ struct SettingsView: View {
             }
             if app.stepsLeft > 0 { link(.permissions) }
             Toggle("Open FaceUnlock at login", isOn: $app.launchAtLogin)
+            LabeledContent("Setup Guide") { Button("Open…") { app.onGuide?() } }
         }
         Section("About") {
             LabeledContent("Face recognition model", value: "SFace (OpenCV Zoo)")

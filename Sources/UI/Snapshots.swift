@@ -73,6 +73,13 @@ enum Snapshots {
         setup(.password, name: "05-password")
         setup(.accessibility, name: "06-accessibility")
 
+        let guide = GuidePage.allCases.filter { $0 != .setup }.map { ($0, GuideStep.done, $0.rawValue) }
+            + GuideStep.allCases.map { (GuidePage.setup, $0, "setup-\($0.rawValue)") }
+        for (page, step, name) in [(GuidePage.welcome, GuideStep.done, "warmup")] + guide {
+            save("20-guide-\(name)", size: CGSize(width: 460, height: 640), onScreen: true,
+                 GuideView(app: app, setUp: { _ in }, close: {}, forced: (page, step)))
+        }
+
         for pane in SettingsPane.allCases {
             save("07-settings-\(pane.rawValue)", size: CGSize(width: 540, height: 640), scheme: .dark,
                  SettingsView(pane: pane, app: app) { _ in })

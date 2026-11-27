@@ -199,6 +199,13 @@ final class AppModel {
     /// macOS would ask before handing over something saved, which can't happen at the lock screen.
     private(set) var needsKeychainAccess = false
     private var askedForKeychain = false
+    /// Opens the step-by-step guide. Set by the app delegate, which owns the windows.
+    @ObservationIgnored var onGuide: (() -> Void)?
+    @ObservationIgnored var onSettings: ((SettingsPane) -> Void)?
+    /// Called after an unlock, so the guide can come back to the front.
+    @ObservationIgnored var onUnlocked: (() -> Void)?
+    /// When your face last unlocked the Mac. The guide waits for this when you try it.
+    private(set) var lastFaceUnlock: Date?
     private var clearedPermissions: Set<String> = []
 
     /// What stands between you and a face unlock, most pressing first. The status line says it,
@@ -781,7 +788,9 @@ final class AppModel {
         notch.leaveLockScreen()
         EventLog.write("Screen unlocked by \(byFace ? "face" : "password or Touch ID")")
         learnFromUnlock(byFace: byFace)
+        defer { onUnlocked?() }
         if byFace {
+            lastFaceUnlock = .now
             history.add(.faceUnlock)
             policy.faceUnlocked()
             // Nothing more to show: the success animation has already played at the lock screen.

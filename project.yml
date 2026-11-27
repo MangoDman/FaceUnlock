@@ -36,8 +36,8 @@ targets:
       path: Info.plist
       properties:
         CFBundleDisplayName: FaceUnlock
-        CFBundleShortVersionString: "1.6.1"
-        CFBundleVersion: "9"
+        CFBundleShortVersionString: "1.7"
+        CFBundleVersion: "10"
         LSUIElement: true
         NSCameraUsageDescription: FaceUnlock uses the built-in camera to recognize your face. Images are processed on this Mac and are not saved.
   FaceUnlockTests:

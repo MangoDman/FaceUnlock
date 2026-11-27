@@ -568,4 +568,37 @@ final class PipelineTests: XCTestCase {
         XCTAssertFalse(Keychain.write(Data(), account: "login-password"))
         XCTAssertNil(PasswordVault.load())
     }
+
+    func testGuideShowsTheFirstThingStillMissing() {
+        func step(keychain: Bool = false, camera: Bool = true, face: Bool = true, password: Bool = true,
+                  accessibility: Bool = true, enabled: Bool = true, confirm: Bool = false) -> GuideStep {
+            .current(keychainNeeded: keychain, camera: camera, face: face, password: password,
+                     accessibility: accessibility, enabled: enabled, confirmationNeeded: confirm)
+        }
+        XCTAssertEqual(step(camera: false, face: false, password: false, accessibility: false, enabled: false), .camera)
+        XCTAssertEqual(step(face: false, password: false), .face)
+        XCTAssertEqual(step(password: false, accessibility: false), .password)
+        XCTAssertEqual(step(accessibility: false, enabled: false), .accessibility)
+        XCTAssertEqual(step(enabled: false), .turnOn)
+        XCTAssertEqual(step(confirm: true), .confirm)
+        XCTAssertEqual(step(), .done)
+        XCTAssertEqual(step(keychain: true, camera: false), .keychain)
+    }
+
+    func testGuidePagesRunFromWelcomeToTryingIt() {
+        XCTAssertEqual(GuidePage.welcome.next, .setup)
+        XCTAssertNil(GuidePage.welcome.previous)
+        XCTAssertEqual(GuidePage.setup.next, .duration)
+        XCTAssertEqual(GuidePage.settings.next, .howItWorks)
+        XCTAssertEqual(GuidePage.howItWorks.next, .tryIt)
+        XCTAssertEqual(GuidePage.tryIt.next, .allSet)
+        XCTAssertNil(GuidePage.allSet.next)
+    }
+
+    func testGuidePartsRunInOrderAndCoverEveryScreen() {
+        let order = GuidePage.allCases.compactMap { $0.chapter?.number }
+        XCTAssertEqual(order, order.sorted(), "a part is never left and returned to")
+        XCTAssertEqual(order.count, GuidePage.allCases.count - 1, "only the welcome has no part")
+        XCTAssertEqual(GuidePage.Chapter.allCases.map(\.rawValue), ["Set Up", "Your Choices", "Get to Know It", "Try It"])
+    }
 }

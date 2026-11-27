@@ -44,6 +44,8 @@ private struct MenuContent: View {
                 Label(need.button, systemImage: need.symbol)
             }
         }
+        // Always there, so it can be looked through again.
+        Button { delegate.showGuide() } label: { Label("Setup Guide…", systemImage: "arrow.right.circle") }
         if app.stepsLeft > 0 {
             Button { delegate.showPermissions() } label: { Label("All Permissions…", systemImage: "checklist") }
         }
@@ -75,6 +77,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var settingsWindow: NSWindow?
     private var setupWindow: NSWindow?
     private var setupModel: SetupModel?
+    private var guideWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Unit tests host the app; leave the system alone there.
@@ -143,9 +146,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         model.start()
         // Opened for you when something is missing, so there's nothing to hunt for.
-        if !Screen.isLocked, model.needsPermissionsAttention { showPermissions() }
-        // Open quietly at login once everything works; otherwise show what's left to do.
-        if !model.isReady { showSettings() }
+        model.onGuide = { [weak self] in self?.showGuide() }
+        model.onUnlocked = { [weak self] in
+            guard let self, let guideWindow else { return }
+            present(guideWindow)
+        }
+        model.onSettings = { [weak self] pane in
+            UserDefaults.standard.set(pane.rawValue, forKey: "settingsSection")
+            self?.showSettings()
+        }
+        // The guide comes up until it has been finished, and again (only the missing steps) if
+        // something stops working. Otherwise open quietly once everything works.
+        let finished = UserDefaults.standard.bool(forKey: GuideView.completedKey)
+        if !Screen.isLocked, !finished || model.needsPermissionsAttention {
+            showGuide(tour: !finished)
+        } else if !model.isReady {
+            showSettings()
+        }
         #if DEBUG
         if CommandLine.arguments.contains("--setup") { requestSetup(.primary) }
         #endif
@@ -154,6 +171,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
         showSettings()
         return false
+    }
+
+    func showGuide(tour: Bool = true) {
+        model.refresh()
+        if guideWindow == nil {
+            let view = GuideView(app: model, setUp: { [weak self] in self?.requestSetup($0) },
+                                 close: { [weak self] in self?.guideWindow?.close() }, tour: tour)
+            let window = NSWindow(contentViewController: NSHostingController(rootView: view))
+            window.title = "Set Up FaceUnlock"
+            window.titleVisibility = .hidden
+            window.styleMask = [.titled, .closable, .fullSizeContentView]
+            window.titlebarAppearsTransparent = true
+            window.isMovableByWindowBackground = true
+            window.isReleasedWhenClosed = false
+            window.delegate = self
+            window.center()
+            guideWindow = window
+        }
+        present(guideWindow)
     }
 
     func showPermissions() {
@@ -228,6 +264,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
+        if let closing = notification.object as? NSWindow, closing === guideWindow {
+            closing.contentViewController = nil
+            guideWindow = nil
+            return
+        }
+        // Back to the guide once the scan or password is done.
+        if (notification.object as? NSWindow) === setupWindow, guideWindow != nil {
+            DispatchQueue.main.async { [weak self] in self?.present(self?.guideWindow) }
+        }
         guard (notification.object as? NSWindow) === setupWindow else { return }
         setupModel?.cancel()
         setupModel = nil

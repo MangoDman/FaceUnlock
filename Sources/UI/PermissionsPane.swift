@@ -25,6 +25,11 @@ struct PermissionsPane: View {
                     Image(systemName: app.stepsLeft == 0 ? "checkmark.seal.fill" : "list.bullet.circle.fill")
                         .foregroundStyle(app.stepsLeft == 0 ? .green : .orange)
                 }
+                if app.stepsLeft > 0 {
+                    LabeledContent("One step at a time, with pictures") {
+                        Button("Guide Me…") { app.onGuide?() }
+                    }
+                }
             }
 
             Section("Needed") {

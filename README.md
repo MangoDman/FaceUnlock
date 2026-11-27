@@ -80,7 +80,8 @@ There is no public island API, so it is detected from the built-in display repor
 1. Open `FaceUnlock.dmg` and drag FaceUnlock to Applications.
 2. Open it. macOS warns you because it isn’t notarized by Apple. Click **Done**, **not Move to Trash**.
 3. In **System Settings → Privacy & Security**, scroll down and click **Open Anyway**.
-4. FaceUnlock opens its **Permissions** page. Work down the list. macOS never grants these by itself: you allow the camera with one click and switch Accessibility on yourself.
+4. On the next box choose **Open Anyway** again (the highlighted button is **Move to Bin**), then use Touch ID.
+5. FaceUnlock opens its **setup guide**. It walks you through each step. macOS never grants these by itself: you allow the camera with one click and switch Accessibility on yourself.
 
 Only do this for software you trust, or [build it yourself](#build-from-source).
 
@@ -94,7 +95,13 @@ Only do this for software you trust, or [build it yourself](#build-from-source).
 |:---:|:---:|:---:|
 | <img src="Screenshots/readme/setup-intro.png" width="240" alt="Setup introduction"> | <img src="Screenshots/readme/setup-capture.png" width="240" alt="Head turn scan"> | <img src="Screenshots/readme/setup-done.png" width="240" alt="Setup complete"> |
 
-FaceUnlock opens **Settings → Permissions** when something is missing, with a button for each step.
+The first time, FaceUnlock opens a **setup guide**: it walks through the camera, your face, your password and Accessibility, then shows the menu bar and lets you try an unlock. Reopen it from **Settings → General → Setup Guide**.
+
+<p align="center">
+  <img src="Screenshots/readme/guide-welcome.png" width="230" alt="The setup guide welcome screen">
+  <img src="Screenshots/readme/guide-accessibility.png" width="230" alt="Step by step Accessibility instructions">
+  <img src="Screenshots/readme/guide-all-set.png" width="230" alt="You are all set">
+</p>
 
 1. Choose **Set Up Face Recognition** and complete the head-turn scan.
 2. Try **Settings → Face Unlock & Password → Test Recognition**. It types nothing and shows the match score.
