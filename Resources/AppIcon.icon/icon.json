@@ -1,0 +1,21 @@
+{
+  "fill-specializations" : [
+    { "value" : { "linear-gradient" : [ "display-p3:0.40000,0.88000,0.46000,1.00000", "display-p3:0.10000,0.62000,0.27000,1.00000" ], "orientation" : { "start" : { "x" : 0.5, "y" : 0 }, "stop" : { "x" : 0.5, "y" : 1 } } } },
+    { "appearance" : "dark", "value" : { "linear-gradient" : [ "display-p3:0.40000,0.88000,0.46000,1.00000", "display-p3:0.10000,0.62000,0.27000,1.00000" ], "orientation" : { "start" : { "x" : 0.5, "y" : 0 }, "stop" : { "x" : 0.5, "y" : 1 } } } }
+  ],
+  "groups" : [
+    {
+      "layers" : [ { "glass" : true, "image-name" : "face.png", "name" : "face" } ],
+      "shadow" : { "kind" : "layer-color", "opacity" : 0.5 },
+      "specular" : true,
+      "translucency" : { "enabled" : false, "value" : 0 }
+    },
+    {
+      "layers" : [ { "glass" : false, "image-name" : "arcs.png", "name" : "arcs", "opacity" : 0.6 } ],
+      "shadow" : { "kind" : "none", "opacity" : 0 },
+      "specular" : false,
+      "translucency" : { "enabled" : false, "value" : 0 }
+    }
+  ],
+  "supported-platforms" : { "squares" : "shared" }
+}

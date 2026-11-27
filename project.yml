@@ -1,0 +1,58 @@
+name: FaceUnlock
+options:
+  bundleIdPrefix: com.faceunlock
+  deploymentTarget:
+    macOS: "26.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    CODE_SIGN_STYLE: Manual
+    # Ad-hoc, so anyone can build it. Tools/local.env can name your own certificate.
+    CODE_SIGN_IDENTITY: "-"
+    ENABLE_HARDENED_RUNTIME: NO
+targets:
+  FaceUnlock:
+    type: application
+    platform: macOS
+    sources:
+      - Sources
+      # Whatever models are there. The anti-spoofing one is not in the public repository.
+      - path: Models
+      - path: ThirdParty
+        buildPhase: resources
+      - path: Resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.faceunlock.mac
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        COREML_CODEGEN_LANGUAGE: None
+      configs:
+        # Installed builds refuse injected code, so nothing can borrow the app's keychain access.
+        Release:
+          ENABLE_HARDENED_RUNTIME: YES
+          CODE_SIGN_ENTITLEMENTS: FaceUnlock.entitlements
+          CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: FaceUnlock
+        CFBundleShortVersionString: "1.1"
+        CFBundleVersion: "2"
+        LSUIElement: true
+        NSCameraUsageDescription: FaceUnlock uses the built-in camera to recognize your face. Images are processed on this Mac and are not saved.
+  FaceUnlockTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources: Tests
+    dependencies:
+      - target: FaceUnlock
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  FaceUnlock:
+    build:
+      targets:
+        FaceUnlock: all
+    test:
+      targets: [FaceUnlockTests]
