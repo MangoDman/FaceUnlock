@@ -21,6 +21,9 @@ final class SetupModel {
     }
 
     var session: CameraService { app.camera }
+    var isFinishingScan: Bool { step == .capture && machine.phase == .lookStraight }
+    /// Set when the scan was the only thing to do, so Settings can simply come back.
+    private(set) var returnsToSettings = false
 
     func beginCapture() {
         errorMessage = nil
@@ -114,6 +117,7 @@ final class SetupModel {
             }
             if Task.isCancelled { return }
             if step == .done {
+                returnsToSettings = app.hasPassword && app.accessibilityTrusted
                 advanceAfterScan()
             } else if step == .capture {
                 errorMessage = "Setup was interrupted. Click Continue to try again."
@@ -161,10 +165,19 @@ struct SetupView: View {
     @State private var password = ""
 
     var body: some View {
+        screens
+            .onChange(of: model.step) { _, step in
+                guard step == .finished, model.returnsToSettings else { return }
+                model.finish(enable: model.appearance == .primary)
+                close()
+            }
+    }
+
+    private var screens: some View {
         VStack(spacing: 0) {
             HStack {
                 Spacer()
-                if model.step != .done && model.step != .intro {
+                if model.step != .done && model.step != .intro && !model.isFinishingScan {
                     Button("Close", systemImage: "xmark") { close() }
                         .labelStyle(.iconOnly)
                         .buttonStyle(.glass)
@@ -255,13 +268,13 @@ struct SetupView: View {
             VStack(spacing: 4) {
                 let guidance = model.step == .done ? .done : model.machine.guidance
                 if let hint = model.hint, model.step == .capture, guidance.title == nil {
-                    Text(guidance.message).font(.headline)
+                    Text(guidance.message).font(.title3)
                     Text(hint).foregroundStyle(Theme.accent).transition(.opacity)
                 } else if let title = guidance.title {
                     Text(title).font(.headline)
                     Text(guidance.message).foregroundStyle(.secondary)
                 } else {
-                    Text(guidance.message).font(.headline)
+                    Text(guidance.message).font(.title3)
                 }
             }
             .multilineTextAlignment(.center)
@@ -282,6 +295,7 @@ struct SetupView: View {
                     Button("Start Over") { model.restartScan() }
                 }
                 .menuStyle(.button).buttonStyle(.glass).controlSize(.large).fixedSize()
+                .disabled(model.isFinishingScan)
             }
         }
     }

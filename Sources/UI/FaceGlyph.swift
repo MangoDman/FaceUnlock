@@ -21,7 +21,12 @@ struct FaceGlyph: View {
     var color: Color = .white
 
     var body: some View {
-        Canvas { context, size in
+        Canvas { context, size in Self.draw(&context, size: size, pose: pose, color: color) }
+            .aspectRatio(1, contentMode: .fit)
+            .accessibilityLabel("Face")
+    }
+
+    static func draw(_ context: inout GraphicsContext, size: CGSize, pose: Pose, color: Color) {
             let s = min(size.width, size.height)
             let c = CGPoint(x: size.width / 2, y: size.height / 2)
 
@@ -74,9 +79,6 @@ struct FaceGlyph: View {
             smile.move(to: point(-0.0952, 0.1021))
             smile.addQuadCurve(to: point(0.0952, 0.1021), control: point(0, 0.188))
             draw(smile, 0.0412)
-        }
-        .aspectRatio(1, contentMode: .fit)
-        .accessibilityLabel("Face")
     }
 }
 
@@ -109,34 +111,6 @@ struct InstructionGlyph: View {
         TimelineView(.animation) { timeline in
             let t = frozenAt ?? (reduceMotion ? 10 : timeline.date.timeIntervalSince(start).truncatingRemainder(dividingBy: 10.5))
             FaceGlyph(pose: Self.pose(at: t), color: color)
-        }
-    }
-}
-
-/// The blue "looking for you" pulse used in the notch (period 1.04 s).
-struct ScanningGlyph: View {
-    var frozenAt: Double?
-    @State private var start = Date.now
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        TimelineView(.animation) { timeline in
-            let t = frozenAt ?? (reduceMotion ? 0.26 : timeline.date.timeIntervalSince(start))
-            let phase = t / 1.035 * 2 * .pi
-            let ring = 0.5 - 0.5 * cos(phase)
-            // Eyes and smile peak out of step with the ring.
-            let features = 0.5 - 0.5 * cos(phase + 2.4)
-            var arcs = FaceGlyph.Pose()
-            arcs.arcSpread = CGFloat(ring) * 0.018 - 0.008
-            arcs.arcs = [0.3, 0.3, 0.3, 0.3]
-            arcs.featureOpacity = 0
-            var face = FaceGlyph.Pose()
-            face.ringOpacity = 0
-            face.arcs = [-1, -1, -1, -1]  // hide arcs in this layer
-            return ZStack {
-                FaceGlyph(pose: arcs, color: Theme.deep.mix(with: Theme.glow, by: ring))
-                FaceGlyph(pose: face, color: Theme.deep.mix(with: Theme.glow, by: features))
-            }
         }
     }
 }

@@ -18,8 +18,9 @@ enum FaceAdaptation {
     static let maximumUses = 60
     /// Closer than this to something already stored adds nothing.
     static let novelty: Float = 0.92
-    /// The least a capture may resemble the setup scan, even with the password behind it.
-    static let floor: Float = 0.45
+    /// The least a capture may resemble the setup scan, even with the password behind it. Close
+    /// to the 0.55 needed to unlock, so a relative who tried first isn't learned from.
+    static let floor: Float = 0.52
     /// How soon the password must follow a capture for the two to be the same person.
     static let confirmationWindow: TimeInterval = 30
 }

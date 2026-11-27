@@ -4,13 +4,15 @@ import SwiftUI
 struct NotchStylePicker: View {
     @Bindable var app: AppModel
 
+    @State private var wallpaper: NSImage?
+
     private static let styles: [(NotchState.Preference, String)] =
         [(.expanded, "Notch"), (.drop, "Pill"), (.compact, "Compact")]
 
     /// What's in effect: "Automatic" means the notch grows here, and a pill elsewhere.
     private var selected: Int {
         let kind = NSScreen.screens.map(ScreenKind.of).first { $0 != .plain } ?? .plain
-        let style = app.notchStyle == .automatic ? (kind == .plain ? .drop : .expanded) : app.notchStyle
+        let style = app.notchStyle == .automatic ? (kind == .plain ? .drop : .compact) : app.notchStyle
         return Self.styles.firstIndex { $0.0 == style } ?? 0
     }
 
@@ -27,7 +29,7 @@ struct NotchStylePicker: View {
                 ForEach(Self.styles.indices, id: \.self) { index in
                     Button { choose(index) } label: {
                         VStack(spacing: 6) {
-                            MiniScreen(preference: Self.styles[index].0)
+                            MiniScreen(preference: Self.styles[index].0, wallpaper: wallpaper)
                                 .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous)
                                     .strokeBorder(index == selected ? Theme.accent : .white.opacity(0.1),
                                                   lineWidth: index == selected ? 3 : 1))
@@ -44,12 +46,13 @@ struct NotchStylePicker: View {
             PullSlider(titles: Self.styles.map(\.1), selected: selected, choose: choose)
         }
         .padding(.vertical, 4)
+        .task { wallpaper = await DesktopWallpaper.load() }
 
         Toggle(isOn: Binding(get: { app.notchStyle == .automatic },
                              set: { app.notchStyle = $0 ? .automatic : Self.styles[selected].0 })) {
             RowLabel("Choose for Each Screen", "wand.and.stars")
         }
-        .help("Grows a notch or Dynamic Island; drops a pill on screens with neither")
+        .help("Beside the camera on a notch or Dynamic Island; a pill on screens with neither")
 
         LabeledContent {
             Picker("Preview as", selection: $app.previewKind) {
@@ -118,13 +121,13 @@ private struct PullSlider: View {
 /// A thumbnail of the top of a screen playing look → recognized.
 private struct MiniScreen: View {
     var preference: NotchState.Preference
+    var wallpaper: NSImage?
     @State private var state = NotchState()
 
     private let scale: CGFloat = 0.42
 
     var body: some View {
-        LinearGradient(colors: [Color(red: 0.16, green: 0.22, blue: 0.45), Color(red: 0.24, green: 0.52, blue: 0.55)],
-                       startPoint: .topLeading, endPoint: .bottomTrailing)
+        PreviewBackdrop(wallpaper: wallpaper)
         // An overlay, so the full-size notch view never widens the card.
         .overlay(alignment: .top) {
             NotchView(state: state)
@@ -137,7 +140,8 @@ private struct MiniScreen: View {
         .accessibilityHidden(true)
         .task {
             state.preference = preference
-            state.notch = CGSize(width: 150, height: 30)
+            // The real size of a 14-inch MacBook Pro's notch, so the shapes grow as they will.
+            state.notch = CGSize(width: 185, height: 32)
             while !Task.isCancelled {
                 for (phase, seconds) in [(NotchState.Phase.closed, 0.7), (.scanning, 2.2), (.success(nil), 1.6)] {
                     state.phase = phase

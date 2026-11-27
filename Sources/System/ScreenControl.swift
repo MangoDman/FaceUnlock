@@ -7,6 +7,11 @@ enum Screen {
         (CGSessionCopyCurrentDictionary() as? [String: Any])?["CGSSessionScreenIsLocked"] as? Bool ?? false
     }
 
+    /// False when another user has switched in front of this one.
+    static var isOnConsole: Bool {
+        (CGSessionCopyCurrentDictionary() as? [String: Any])?["kCGSSessionOnConsoleKey"] as? Bool ?? false
+    }
+
     /// False with the lid closed (clamshell mode): the camera can't see anyone.
     static var builtInDisplayIsActive: Bool {
         var ids = [CGDirectDisplayID](repeating: 0, count: 8)
@@ -63,7 +68,7 @@ enum PasswordTyper {
     /// One key going down or up. Refuses as soon as the screen is no longer locked.
     private static func post(_ key: CGKeyCode, down: Bool, flags: CGEventFlags, characters: [UniChar],
                              from source: CGEventSource?) -> Bool {
-        guard Screen.isLocked,
+        guard Screen.isLocked, Screen.isOnConsole,
               let event = CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: down) else { return false }
         event.flags = flags
         if !characters.isEmpty {
@@ -93,7 +98,7 @@ enum PasswordTyper {
 
     /// Clears the field, types the password one character at a time and presses Return.
     static func type(_ password: String) -> Bool {
-        guard isTrusted, Screen.isLocked else { return false }
+        guard isTrusted, Screen.isLocked, Screen.isOnConsole else { return false }
         let source = CGEventSource(stateID: .hidSystemState)
         guard clearField(from: source) else { return false }
         for character in password {

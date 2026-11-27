@@ -61,6 +61,9 @@ final class NotchState {
     enum Phase: Hashable {
         /// Exactly the size of the hardware notch, so it can't be seen.
         case closed
+        /// Waiting at the lock screen. The compact style shows a padlock, as iPhone Duo does;
+        /// the others look closed.
+        case locked
         case scanning
         case hint(String)
         case success(String?)
@@ -73,7 +76,7 @@ final class NotchState {
 
         var announcement: String? {
             switch self {
-            case .closed, .scanning: nil
+            case .closed, .locked, .scanning: nil
             case .hint(let text), .failure(let text): text
             case .success(let text): text ?? "Face recognized"
             case .passwordRequired: "Password required"
@@ -97,7 +100,7 @@ final class NotchState {
 
     var style: Style {
         switch preference {
-        case .automatic: screen == .notch ? .expanded : screen == .island ? .island : .drop
+        case .automatic: screen == .plain ? .drop : .compact
         case .expanded: screen == .island ? .island : screen == .plain ? .drop : .expanded
         case .drop: .drop
         case .compact: .compact
@@ -116,7 +119,7 @@ final class NotchState {
         // Far enough below a notch or island to break away from it completely.
         let rest = screen == .plain ? 10 : topInset + notch.height + 16
         return switch phase {
-        case .closed:
+        case .closed, .locked:
             switch screen {
             case .notch: Drop(top: max(notch.height - 22, 0), width: 40, height: 18, radius: 9)
             case .island: Drop(top: topInset + 2, width: 36, height: 18, radius: 9)
@@ -124,7 +127,8 @@ final class NotchState {
             case .plain: Drop(top: -70, width: 60, height: 60, radius: 30)
             }
         case .scanning, .success(nil): Drop(top: rest, width: 96, height: 96, radius: 48)
-        case .success, .hint, .failure, .passwordRequired: Drop(top: rest, width: 260, height: 112, radius: 38)
+        case .hint: Drop(top: rest, width: 260, height: 140, radius: 40)
+        case .success, .failure, .passwordRequired: Drop(top: rest, width: 260, height: 112, radius: 38)
         case .notice: Drop(top: rest, width: 300, height: 116, radius: 38)
         case .prompt: Drop(top: rest, width: 340, height: 178, radius: 38)
         }
@@ -136,30 +140,47 @@ final class NotchState {
     var isCompactView: Bool {
         guard style == .compact else { return false }
         return switch phase {
-        case .scanning, .success(nil): true
+        case .locked, .scanning, .success(nil): true
         default: false
         }
     }
 
+    /// Looking, being asked to turn, and recognised are one piece of content, so the face
+    /// stays where it is and turns into the tick without anything being replaced.
+    var contentID: Phase {
+        switch phase {
+        case .locked, .success(nil), .hint: .scanning
+        default: phase
+        }
+    }
+
+    var isSuccess: Bool {
+        if case .success = phase { true } else { false }
+    }
+
+    /// Nothing is showing beyond the hardware itself.
+    var isShut: Bool { phase == .closed || (phase == .locked && style != .compact) }
+
     /// The visible area below `topGap`, used for drawing and for the pointer.
     var size: CGSize {
-        if phase == .closed { return notch }
+        if isShut { return notch }
         switch style {
         case .drop:
             return CGSize(width: drop.width, height: drop.top + drop.height)
         case .expanded, .island:
             let narrow = max(notch.width + 40, 236), wide = max(notch.width + 40, 346)
             return switch phase {
-            case .notice: CGSize(width: wide, height: notch.height + 106)
+            case .notice: CGSize(width: wide, height: notch.height + 118)
             case .prompt: CGSize(width: wide, height: notch.height + 174)
-            default: CGSize(width: narrow, height: notch.height + 132)
+            default: CGSize(width: narrow, height: notch.height + 140)
             }
         case .compact:
             let wide = max(notch.width + 2 * Self.wing, 344)
             return switch phase {
             case .closed: notch
-            case .scanning, .success(nil): CGSize(width: notch.width + 2 * Self.wing, height: max(notch.height, 36))
-            case .success, .hint, .failure, .passwordRequired, .notice: CGSize(width: wide, height: notch.height + 104)
+            case .locked, .scanning, .success(nil): CGSize(width: notch.width + 2 * Self.wing, height: max(notch.height, 36))
+            case .hint: CGSize(width: wide, height: max(notch.height, 36) + 48)
+            case .success, .failure, .passwordRequired, .notice: CGSize(width: wide, height: notch.height + 118)
             case .prompt: CGSize(width: wide, height: notch.height + 174)
             }
         }
@@ -167,7 +188,7 @@ final class NotchState {
 
     /// Corner radius of the grown shapes.
     var radius: CGFloat {
-        if phase == .closed { return screen == .notch ? 11 : notch.height / 2 }
+        if isShut { return screen == .notch ? 11 : notch.height / 2 }
         return switch style {
         case .expanded, .island: 38
         default: isCompactView ? 18 : 30
@@ -175,7 +196,7 @@ final class NotchState {
     }
 
     /// The concave corners that flare the expanded notch into the screen edge.
-    var flare: CGFloat { style == .expanded && phase != .closed ? 16 : 0 }
+    var flare: CGFloat { style == .expanded && !isShut ? 16 : 0 }
 
     /// Whether the shape floats with all four corners rounded.
     var floating: Bool { style == .island || (style == .compact && screen != .notch) }
@@ -264,39 +285,13 @@ private struct Liquid: View, Animatable {
     }
 }
 
-/// The Duo's completion: the four arcs close into one ring, then a checkmark draws inside it.
-struct ClosingRing: View {
-    var finished = false
-    @State private var closed = false
-    @State private var checked = false
-
-    var body: some View {
-        ZStack {
-            ForEach(0..<4, id: \.self) { index in
-                let half = closed || finished ? 45.4 : 30.0
-                Arc(start: .degrees(Double(index) * 90 - 90 - half), end: .degrees(Double(index) * 90 - 90 + half))
-                    .stroke(Theme.glow, style: StrokeStyle(lineWidth: 4.5, lineCap: .round))
-            }
-            .padding(closed || finished ? 7 : 2)
-            Checkmark()
-                .trim(from: 0, to: checked || finished ? 1 : 0)
-                .stroke(Theme.glow, style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
-                .padding(7)
-        }
-        .onAppear {
-            withAnimation(.easeInOut(duration: 0.26)) { closed = true }
-            withAnimation(.timingCurve(0.65, 0, 0.35, 1, duration: 0.32).delay(0.24)) { checked = true }
-        }
-    }
-}
-
 struct NotchView: View {
     var state: NotchState
     var frozenAt: Double?
     @State private var shakes: CGFloat = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private var open: Bool { state.phase != .closed }
+    private var open: Bool { !state.isShut }
 
     /// New content falls into place from above; old content simply fades. No sideways movement.
     private func fall(_ distance: CGFloat) -> AnyTransition {
@@ -353,7 +348,7 @@ struct NotchView: View {
                         if state.style == .compact { compactContent } else { expandedContent }
                     }
                     .frame(width: size.width, alignment: .top)
-                    .id(state.phase)
+                    .id(state.contentID)
                     .transition(fall(26))
                 }
             }
@@ -367,7 +362,7 @@ struct NotchView: View {
 
     @ViewBuilder private var expandedContent: some View {
         switch state.phase {
-        case .closed:
+        case .closed, .locked:
             EmptyView()
         case .notice(let name, let heading, let message):
             card { symbol(name, Theme.glow).symbolEffect(.bounce, value: heading) } text: {
@@ -382,8 +377,9 @@ struct NotchView: View {
                 switch state.phase {
                 case .success(nil): OpeningLock(finished: frozenAt != nil)
                 case .success(let text?): centred(text)
-                case .scanning: centred("Looking for You")
-                case .hint(let text): centred(text)
+                // Gone at once on recognition, so it never lies over the padlock.
+                case .scanning: centred("Looking for You").transition(.asymmetric(insertion: .opacity, removal: .identity))
+                case .hint(let text): centred(text).transition(.asymmetric(insertion: .opacity, removal: .identity))
                 case .failure(let text):
                     centred(text)
                     detail("Move the pointer here to try again")
@@ -418,7 +414,7 @@ struct NotchView: View {
                     dropContent
                         .frame(width: drop.width, height: drop.height)
                         .offset(y: drop.top)
-                        .id(state.phase)
+                        .id(state.contentID)
                         .transition(fall(drop.top + 24))
                 }
             }
@@ -436,10 +432,22 @@ struct NotchView: View {
 
     @ViewBuilder private var dropContent: some View {
         switch state.phase {
-        case .closed:
+        case .closed, .locked:
             EmptyView()
-        case .scanning, .success(nil):
-            glyph.padding(13)
+        case .scanning, .hint, .success(nil):
+            VStack(spacing: 4) {
+                // Always the same 70 points, 13 from the top of the pill, whatever follows.
+                glyph.frame(width: 70, height: 70)
+                if case .hint(let text) = state.phase {
+                    VStack(spacing: 2) {
+                        title(text)
+                        detail("Then look back at the camera")
+                    }
+                    .transition(.asymmetric(insertion: .opacity, removal: .identity))
+                }
+            }
+            .padding(.top, 13)
+            .frame(maxHeight: .infinity, alignment: .top)
         case .notice(let name, let heading, let message):
             stack { symbol(name, Theme.glow).symbolEffect(.bounce, value: heading) } text: {
                 title(heading)
@@ -449,11 +457,6 @@ struct NotchView: View {
             promptContent(heading, message).frame(maxHeight: .infinity)
         case .success(let text?):
             stack { glyph } text: { title(text) }
-        case .hint(let text):
-            stack { glyph } text: {
-                title(text)
-                detail("Then look back at the camera")
-            }
         case .failure(let text):
             stack { glyph } text: {
                 title(text)
@@ -473,19 +476,35 @@ struct NotchView: View {
         switch state.phase {
         case .closed:
             EmptyView()
-        case .scanning:
-            compact { Image(systemName: "lock.fill").font(.system(size: 15, weight: .semibold)).foregroundStyle(.white) }
-                trailing: { ScanningGlyph(frozenAt: frozenAt).frame(width: 27, height: 27) }
-        case .success(nil):
-            compact { OpeningLock(finished: frozenAt != nil) }
-                trailing: { ClosingRing(finished: frozenAt != nil).frame(width: 62, height: 62).scaleEffect(0.42).frame(width: 27, height: 27) }
+        case .locked, .scanning, .hint, .success(nil):
+            VStack(spacing: 0) {
+            compact {
+                Image(systemName: state.phase == .success(nil) ? "lock.open.fill" : "lock.fill")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .contentTransition(.symbolEffect(.replace))
+                    .animation(Theme.open.delay(UnlockGlyph.Beat.joined), value: state.phase)
+            } trailing: {
+                ZStack {
+                    if state.phase != .locked {
+                        UnlockGlyph(success: state.isSuccess, frozenAt: frozenAt).transition(.opacity)
+                    }
+                }
+                .frame(width: 27, height: 27)
+            }
+            // A fixed width, so the lock and the face don't move when the shape widens.
+            .frame(width: state.notch.width + 2 * NotchState.wing)
+            if case .hint(let text) = state.phase {
+                VStack(spacing: 2) {
+                    title(text)
+                    detail("Then look back at the camera")
+                }
+                .padding(.top, 4)
+                .transition(.asymmetric(insertion: .opacity, removal: .identity))
+            }
+            }
         case .success(let text?):
             card { glyph } text: { title(text) }
-        case .hint(let text):
-            card { glyph } text: {
-                title(text)
-                detail("Then look back at the camera")
-            }
         case .failure(let text):
             card { glyph } text: {
                 title(text)
@@ -510,10 +529,10 @@ struct NotchView: View {
 
     @ViewBuilder private var glyph: some View {
         switch state.phase {
-        case .success: ClosingRing(finished: frozenAt != nil).frame(width: 62, height: 62)
         case .failure: FaceGlyph(color: .white)
         case .passwordRequired: Image(systemName: "lock.fill").font(.system(size: 32)).foregroundStyle(.white)
-        default: ScanningGlyph(frozenAt: frozenAt)
+        // One view for looking, hints and success.
+        default: UnlockGlyph(success: state.isSuccess, frozenAt: frozenAt)
         }
     }
 
@@ -552,18 +571,12 @@ struct NotchView: View {
     /// Symbol on top, words under it, everything on the centre line.
     private func stack(@ViewBuilder icon: () -> some View, @ViewBuilder text: () -> some View) -> some View {
         VStack(spacing: 6) {
-            icon().frame(width: 40, height: 40).scaleEffect(isRingRow ? 0.64 : 1)
+            icon().frame(width: 40, height: 40)
             VStack(spacing: 2, content: text)
         }
         .multilineTextAlignment(.center)
         .padding(.horizontal, 18)
         .frame(maxWidth: .infinity)
-    }
-
-    /// The closing ring draws at 62 points and is shrunk to fit a message.
-    private var isRingRow: Bool {
-        if case .success = state.phase { return true }
-        return false
     }
 
     private func capsule(_ label: String, fill: Color, ink: Color, action: @escaping () -> Void) -> some View {
@@ -609,7 +622,7 @@ private struct OpeningLock: View {
             .font(.system(size: 15, weight: .semibold))
             .foregroundStyle(.white)
             .contentTransition(.symbolEffect(.replace))
-            .onAppear { withAnimation(Theme.open.delay(0.3)) { open = true } }
+            .onAppear { withAnimation(Theme.open.delay(UnlockGlyph.Beat.joined)) { open = true } }
     }
 }
 
@@ -652,7 +665,7 @@ final class NotchPresenter {
     func arm(onHover: @escaping () -> Void) {
         armed = true
         state.onHover = onHover
-        state.phase = .closed
+        state.phase = .locked
         present()
     }
 
@@ -664,7 +677,13 @@ final class NotchPresenter {
 
     func show(_ phase: NotchState.Phase, for duration: TimeInterval? = nil) {
         collapseTask?.cancel()
-        if case .success(nil) = phase { EventLog.write("Notch: success animation") }
+        // What was shown, in order, so a real unlock can be checked afterwards.
+        switch phase {
+        case .scanning: EventLog.write("Notch: looking")
+        case .hint(let text): EventLog.write("Notch: hint \(text)")
+        case .success(nil): EventLog.write("Notch: success animation")
+        default: break
+        }
         let wasVisible = panel?.isVisible ?? false
         // The sound starts with the animation it was composed for.
         let sound = Self.sound(for: phase, after: wasVisible ? state.phase : .closed)
@@ -698,13 +717,13 @@ final class NotchPresenter {
         case .passwordRequired, .prompt: .password
         case .notice: .notice
         case .hint: .tap
-        case .closed: nil
+        case .closed, .locked: nil
         }
     }
 
-    /// How long success stays up before the screen is unlocked: the ring and tick take 0.56 s
-    /// to draw, and the finished tick is then held long enough to be seen.
-    static let successHold: TimeInterval = 0.95
+    /// How long success stays up before the screen is unlocked: the arcs join and the tick
+    /// draws over 1.05 s, and the finished tick is then held long enough to be seen.
+    static let successHold: TimeInterval = 1.45
 
     /// Plays the success animation and returns once it has been seen. Unlock after this.
     func showSuccess() async {
@@ -718,7 +737,7 @@ final class NotchPresenter {
             try? await Task.sleep(for: .seconds(delay))
             guard !Task.isCancelled, let self else { return }
             if case .success = state.phase { Sounds.play(.retract) }
-            state.phase = .closed
+            state.phase = armed ? .locked : .closed
             updateInteractivity()
             guard !armed else { return }
             try? await Task.sleep(for: .seconds(0.75 * Theme.slowMotion))
@@ -754,9 +773,12 @@ final class NotchPresenter {
         if !Screen.isLocked, LockScreenSpace.exists { close() }
         let panel = ensurePanel()
         position(panel)
-        panel.level = Screen.isLocked ? NSWindow.Level(rawValue: Int(CGShieldingWindowLevel()) + 1) : .statusBar
-        panel.orderFrontRegardless()
-        LockScreenSpace.adopt(panel)
+        let level = Screen.isLocked ? NSWindow.Level(rawValue: Int(CGShieldingWindowLevel()) + 1) : .statusBar
+        if !panel.isVisible || panel.level != level {
+            panel.level = level
+            panel.orderFrontRegardless()
+            LockScreenSpace.adopt(panel)
+        }
         updateInteractivity()
         if passthrough == nil {
             passthrough = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in

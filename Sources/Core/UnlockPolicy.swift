@@ -3,7 +3,7 @@ import Foundation
 /// When is a face allowed to unlock the Mac? Mirrors the iPhone Duo rules:
 /// a recent password / Touch ID unlock, a time limit (45 minutes unless changed), and a failure limit.
 struct UnlockPolicy: Equatable {
-    enum Window: String, CaseIterable, Identifiable {
+    enum Window: String, CaseIterable, Identifiable, Codable {
         /// Expires after the Mac has sat locked for the time limit (matches reports for iPhone Duo).
         case inactivity
         /// Expires the time limit after the last password or Touch ID unlock.

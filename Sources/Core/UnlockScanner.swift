@@ -60,6 +60,9 @@ struct UnlockScanner {
     private var everMatched = false
     private var sawFace = false
     private var sawOwner = false
+    /// The owner was recognised at some point in this scan. Never forgotten, even if the face
+    /// then leaves or changes.
+    private(set) var reachedIdentity = false
     /// Why the last matching frame didn't count, for the log.
     private(set) var heldBack: FaceSample?
     private var strangerFrames = 0
@@ -122,6 +125,7 @@ struct UnlockScanner {
 
         let identified = matches >= rules.requiredMatches
         everMatched = everMatched || identified
+        reachedIdentity = reachedIdentity || identified
         needsLiveness = everMatched && (liveness == .pending || !modelSatisfied)
 
         if let turn = rules.challenge, !challengePassed {

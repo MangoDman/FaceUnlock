@@ -15,5 +15,5 @@ enum Theme {
     static let open = Animation.spring(response: 0.45 * slowMotion, dampingFraction: 0.7)
     static let close = Animation.spring(response: 0.45 * slowMotion, dampingFraction: 1.0)
     /// Above 1 only in the notch test mode, so the motion can be recorded.
-    static let slowMotion: Double = CommandLine.arguments.contains("--notch-test") ? 7 : 1
+    static let slowMotion: Double = LaunchOptions.has("--notch-test") ? 7 : 1
 }

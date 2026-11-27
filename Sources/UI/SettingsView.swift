@@ -96,7 +96,7 @@ struct Profile {
 
     static let current: Profile = {
         // Screenshots for the website must not show a real person.
-        if CommandLine.arguments.contains("--demo") { return Profile(name: "Your Name") }
+        if LaunchOptions.has("--demo") { return Profile(name: "Your Name") }
         let node = try? ODNode(session: ODSession.default(), type: ODNodeType(kODNodeTypeLocalNodes))
         let record = try? node?.record(withRecordType: kODRecordTypeUsers, name: NSUserName(), attributes: nil)
         let data = (try? record?.values(forAttribute: kODAttributeTypeJPEGPhoto))?.first as? Data
@@ -320,6 +320,9 @@ struct SettingsView: View {
     var setUp: (_ appearance: Appearance) -> Void
     var open: (SettingsPane) -> Void = { _ in }
     @State private var confirmingReset = false
+    /// Where the time slider is while it is being dragged.
+    @State private var draggedStep: Double?
+    @State private var dragging = false
     @State private var adding = false
     @State private var chosen: Appearance?
 
@@ -474,7 +477,7 @@ struct SettingsView: View {
         }
 
         Section {
-            Toggle("Use Face Unlock to unlock your Mac", isOn: Binding(
+            Toggle("Unlock with Front Camera", isOn: Binding(
                 get: { app.isEnabled && app.isSetUp },
                 set: { on in
                     if on && (!app.isSetUp || !app.hasPassword || !app.accessibilityTrusted) {
@@ -483,9 +486,9 @@ struct SettingsView: View {
                         app.isEnabled = on
                     }
                 }))
-            Toggle("Require attention to unlock", isOn: $app.requiresAttention)
+            Toggle("Require attention to unlock", isOn: guarded(\.requiresAttention))
         } footer: {
-            footer("Purchases, saved passwords and administrator requests still require Touch ID or your password.")
+            footer("Use the front camera, along with a recent Touch ID or password authentication, to quickly unlock your Mac. Face recognition data never leaves your Mac. To make purchases or to access your passwords, Touch ID or your password is still required.")
         }
 
         if app.isSetUp {
@@ -618,7 +621,8 @@ struct SettingsView: View {
         Section {
             VStack(alignment: .leading, spacing: 8) {
                 LabeledContent("Require password after") {
-                    Text(Self.duration(app.timeLimit)).monospacedDigit()
+                    Text(Self.duration(draggedStep.map { UnlockPolicy.timeLimits[Int($0.rounded())] } ?? app.timeLimit))
+                        .monospacedDigit()
                 }
                 Slider(value: timeLimitStep, in: 0...Double(UnlockPolicy.timeLimits.count - 1), step: 1) {
                     Text("Time limit")
@@ -626,18 +630,29 @@ struct SettingsView: View {
                     Text("5 min")
                 } maximumValueLabel: {
                     Text("3 hr")
+                } onEditingChanged: { editing in
+                    // Applied on release, so a longer time asks for Touch ID once.
+                    dragging = editing
+                    if !editing, let step = draggedStep {
+                        draggedStep = nil
+                        setTimeLimit(step)
+                    }
                 }
                 .labelsHidden()
                 if app.timeLimit != UnlockPolicy.defaultTimeLimit {
-                    Button("Use 45 Minutes") { app.timeLimit = UnlockPolicy.defaultTimeLimit }
+                    Button("Use 45 Minutes") {
+                        var proposed = app.security
+                        proposed.timeLimit = UnlockPolicy.defaultTimeLimit
+                        app.propose(proposed)
+                    }
                         .buttonStyle(.link)
                 }
             }
-            Picker("Count the time", selection: $app.window) {
+            Picker("Count the time", selection: guarded(\.window)) {
                 Text("While sitting locked").tag(UnlockPolicy.Window.inactivity)
                 Text("Since last password").tag(UnlockPolicy.Window.strict)
             }
-            Picker("Unrecognized attempts allowed", selection: $app.failureLimit) {
+            Picker("Unrecognized attempts allowed", selection: guarded(\.failureLimit)) {
                 ForEach([3, 4, 5], id: \.self) { Text("\($0)").tag($0) }
             }
             LabeledContent("Mac password") {
@@ -682,7 +697,7 @@ struct SettingsView: View {
 
     @ViewBuilder private var security: some View {
         Section {
-            Picker("Protection", selection: $app.protection) {
+            Picker("Protection", selection: guarded(\.protection)) {
                 Text("Standard").tag(AppModel.Protection.standard)
                 Text("High").tag(AppModel.Protection.high)
                 Text("Maximum").tag(AppModel.Protection.maximum)
@@ -695,11 +710,11 @@ struct SettingsView: View {
 
         Section {
             if AppModel.hasSpoofModel {
-                toggle("Anti-Spoofing Model (Experimental)", "brain", $app.usesSpoofModel)
+                toggle("Anti-Spoofing Model (Experimental)", "brain", guarded(\.usesSpoofModel))
             }
-            toggle("Require Attention", "eye.circle", $app.requiresAttention)
-            toggle("Only When You’re Alone", "person.fill.checkmark", $app.requiresSolitude)
-            Picker(selection: $app.strictness) {
+            toggle("Require Attention", "eye.circle", guarded(\.requiresAttention))
+            toggle("Only When You’re Alone", "person.fill.checkmark", guarded(\.requiresSolitude))
+            Picker(selection: guarded(\.strictness)) {
                 Text("Balanced").tag(AppModel.Strictness.balanced)
                 Text("Strict").tag(AppModel.Strictness.strict)
             } label: {
@@ -843,7 +858,7 @@ struct SettingsView: View {
             point("key.horizontal", "Password in your keychain", "It’s used only to unlock this Mac’s screen.")
         }
         Section {
-            toggle("Update Face Data Automatically", "arrow.triangle.2.circlepath", $app.adaptsToFace)
+            toggle("Update Face Data Automatically", "arrow.triangle.2.circlepath", guarded(\.adaptsToFace))
             if !app.enrollment.updates.isEmpty {
                 LabeledContent("\(app.enrollment.updates.count) of \(FaceAdaptation.capacity) updates stored") {
                     Button("Forget") { app.forgetUpdates() }
@@ -866,13 +881,31 @@ struct SettingsView: View {
 
     // MARK: Pieces
 
+    /// A control for one protective choice.
+    private func guarded<Value>(_ choice: WritableKeyPath<SecuritySettings, Value>) -> Binding<Value> {
+        Binding {
+            app.security[keyPath: choice]
+        } set: {
+            var proposed = app.security
+            proposed[keyPath: choice] = $0
+            app.propose(proposed)
+        }
+    }
+
     /// The slider moves along the list of choices, so short times aren't crowded together.
     private var timeLimitStep: Binding<Double> {
         Binding {
-            Double(UnlockPolicy.timeLimits.firstIndex { $0 >= app.timeLimit } ?? UnlockPolicy.timeLimits.count - 1)
+            draggedStep ?? Double(UnlockPolicy.timeLimits.firstIndex { $0 >= app.timeLimit } ?? UnlockPolicy.timeLimits.count - 1)
         } set: {
-            app.timeLimit = UnlockPolicy.timeLimits[Int($0.rounded())]
+            // Keyboard and accessibility changes arrive without a drag.
+            if dragging { draggedStep = $0 } else { setTimeLimit($0) }
         }
+    }
+
+    private func setTimeLimit(_ step: Double) {
+        var proposed = app.security
+        proposed.timeLimit = UnlockPolicy.timeLimits[Int(step.rounded())]
+        app.propose(proposed)
     }
 
     static func duration(_ minutes: Int) -> String {

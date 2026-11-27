@@ -8,7 +8,7 @@ import ServiceManagement
 @MainActor @Observable
 final class AppModel {
     /// How much proof of a live face is needed.
-    enum Protection: String, CaseIterable, Identifiable {
+    enum Protection: String, CaseIterable, Identifiable, Codable {
         /// Rejects screens and photos it can spot. Never asks you to do anything.
         case standard
         /// Also needs proof of a live face: a blink or a natural head movement.
@@ -27,26 +27,47 @@ final class AppModel {
     private(set) var testResult: String?
     private(set) var pausedUntil: Date?
 
-    enum Strictness: String, CaseIterable, Identifiable {
+    enum Strictness: String, CaseIterable, Identifiable, Codable {
         case balanced, strict
         var id: String { rawValue }
         var threshold: Float { self == .balanced ? 0.55 : 0.65 }
     }
-    var strictness = Strictness(rawValue: UserDefaults.standard.string(forKey: "strictness") ?? "") ?? .balanced {
-        didSet { UserDefaults.standard.set(strictness.rawValue, forKey: "strictness") }
+    /// Kept in the keychain (see `SecuritySettings`).
+    private(set) var security = SecurityStore.load() {
+        didSet {
+            guard security != oldValue else { return }
+            SecurityStore.save(security)
+            applyLimits()
+        }
     }
+
+    /// Applies a change. Anything that makes the Mac easier to open needs Touch ID or the
+    /// password first, once there is something to protect.
+    func propose(_ new: SecuritySettings) {
+        guard new.isWeaker(than: security), isSetUp || hasPassword else {
+            security = new
+            return
+        }
+        Task {
+            if await authorizeFaceChange("lower FaceUnlock’s protection") { security = new }
+        }
+    }
+
+    var protection: Protection { security.protection }
+    var strictness: Strictness { security.strictness }
+    var requiresAttention: Bool { security.requiresAttention }
+    var requiresSolitude: Bool { security.requiresSolitude }
+    var usesSpoofModel: Bool { security.usesSpoofModel }
+    var timeLimit: Int { security.timeLimit }
+    var failureLimit: Int { security.failureLimit }
+    var window: UnlockPolicy.Window { security.window }
+    var adaptsToFace: Bool { security.adaptsToFace }
     /// Off by default: on a real MacBook camera it refused the owner's own face (scores -1.2 to
     /// -3.6). While off it only records its score, so it can be judged before it's trusted.
     /// The public build leaves the anti-spoofing model out, and its controls with it.
     /// `--demo` shows the app as the public build does, for the website’s screenshots.
-    static let hasSpoofModel = !CommandLine.arguments.contains("--demo")
+    static let hasSpoofModel = !LaunchOptions.has("--demo")
         && Bundle.main.url(forResource: "AntiSpoof", withExtension: "mlmodelc") != nil
-    var usesSpoofModel = UserDefaults.standard.bool(forKey: "spoofModel") {
-        didSet { UserDefaults.standard.set(usesSpoofModel, forKey: "spoofModel") }
-    }
-    var requiresSolitude = UserDefaults.standard.bool(forKey: "solitude") {
-        didSet { UserDefaults.standard.set(requiresSolitude, forKey: "solitude") }
-    }
     enum AlertStyle: String, CaseIterable, Identifiable {
         case notch, notificationCenter, both
         var id: String { rawValue }
@@ -128,12 +149,6 @@ final class AppModel {
             syncNotifications()
         }
     }
-    var requiresAttention = UserDefaults.standard.object(forKey: "attention") as? Bool ?? true {
-        didSet { UserDefaults.standard.set(requiresAttention, forKey: "attention") }
-    }
-    var protection = Protection(rawValue: UserDefaults.standard.string(forKey: "protection") ?? "") ?? .high {
-        didSet { UserDefaults.standard.set(protection.rawValue, forKey: "protection") }
-    }
     var captureStyle = CaptureStyle(rawValue: UserDefaults.standard.string(forKey: "captureStyle") ?? "") ?? .arcs {
         didSet { UserDefaults.standard.set(captureStyle.rawValue, forKey: "captureStyle") }
     }
@@ -143,26 +158,8 @@ final class AppModel {
     var keepAwake = UserDefaults.standard.bool(forKey: "keepAwake") {
         didSet { UserDefaults.standard.set(keepAwake, forKey: "keepAwake") }
     }
-    /// Learns from unlocks so matching keeps up with how you look. Off ignores what was learned.
-    var adaptsToFace = UserDefaults.standard.object(forKey: "adapts") as? Bool ?? true {
-        didSet { UserDefaults.standard.set(adaptsToFace, forKey: "adapts") }
-    }
     /// The latest clear capture from the lock screen, waiting for an unlock to vouch for it.
     private var candidate: (vector: [Float], date: Date)?
-    /// Minutes before the password is needed again.
-    var timeLimit = UserDefaults.standard.object(forKey: "timeLimit") as? Int ?? UnlockPolicy.defaultTimeLimit {
-        didSet {
-            UserDefaults.standard.set(timeLimit, forKey: "timeLimit")
-            applyLimits()
-        }
-    }
-    /// Unrecognized attempts before the password is needed.
-    var failureLimit = UserDefaults.standard.object(forKey: "failureLimit") as? Int ?? 5 {
-        didSet {
-            UserDefaults.standard.set(failureLimit, forKey: "failureLimit")
-            applyLimits()
-        }
-    }
     var soundEffects = Sounds.isOn {
         didSet {
             Sounds.isOn = soundEffects
@@ -174,20 +171,13 @@ final class AppModel {
     }
 
     private func applyLimits() {
+        policy.window = window
         policy.timeout = TimeInterval(min(max(timeLimit, 5), 180) * 60)
         policy.maximumFailures = min(max(failureLimit, 1), 5)
         refresh()
         syncNotifications()
     }
 
-    var window = UnlockPolicy.Window(rawValue: UserDefaults.standard.string(forKey: "window") ?? "") ?? .inactivity {
-        didSet {
-            UserDefaults.standard.set(window.rawValue, forKey: "window")
-            policy.window = window
-            refresh()
-            syncNotifications()
-        }
-    }
     var launchAtLogin = SMAppService.mainApp.status == .enabled {
         didSet {
             guard launchAtLogin != (SMAppService.mainApp.status == .enabled) else { return }
@@ -223,6 +213,7 @@ final class AppModel {
     private let analyzer = FaceAnalyzer()
     private let store = TemplateStore()
     private var policy = UnlockPolicy()
+    private var screen = LockTracker()
 
     private var scanTask: Task<Void, Never>?
     private var cameraOwner: UUID?
@@ -255,6 +246,9 @@ final class AppModel {
         policy.window = window
         policy.timeout = TimeInterval(min(max(timeLimit, 5), 180) * 60)
         policy.maximumFailures = min(max(failureLimit, 1), 5)
+        SecurityStore.save(security)
+        screen = LockTracker()
+        if Screen.isLocked { _ = screen.lockNotice(screenIsLocked: true) }
         enrollment = store.load()
         refresh()
         EventLog.write("App started. Enabled \(isEnabled), set up \(isSetUp), password \(hasPassword), camera \(cameraAuthorized), accessibility \(accessibilityTrusted)")
@@ -275,8 +269,9 @@ final class AppModel {
                 MainActor.assumeIsolated { if let self { action(self) } }
             }
         }
-        observe("com.apple.screenIsLocked") { $0.screenLocked() }
-        observe("com.apple.screenIsUnlocked") { $0.screenUnlocked() }
+        // Any program can post these, so each is checked against the screen itself.
+        observe("com.apple.screenIsLocked") { $0.verify(locked: true) }
+        observe("com.apple.screenIsUnlocked") { $0.verify(locked: false) }
         observe("com.apple.screensaver.didstop") { $0.woke("screen saver stopped") }
 
         let workspace = NSWorkspace.shared.notificationCenter
@@ -488,7 +483,7 @@ final class AppModel {
 
     /// For `--snapshots --demo` only: nothing is saved.
     func showSampleAppearances() {
-        guard CommandLine.arguments.contains("--snapshots"), CommandLine.arguments.contains("--demo") else { return }
+        guard LaunchOptions.has("--snapshots"), LaunchOptions.has("--demo") else { return }
         enrollment = .init(primary: [[1]])
         enrollment[.glasses] = [[1]]
     }
@@ -500,6 +495,23 @@ final class AppModel {
         if Screen.isLocked {
             EventLog.write("Wake: \(why)")
             wakePending = true
+        }
+    }
+
+    private func verify(locked expected: Bool) {
+        Task {
+            // The session's own flag can lag the notice by a moment.
+            for _ in 0..<30 where Screen.isLocked != expected {
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+            let actual = Screen.isLocked
+            if expected {
+                if screen.lockNotice(screenIsLocked: actual) { screenLocked() }
+            } else if screen.unlockNotice(screenIsLocked: actual) {
+                screenUnlocked()
+            } else {
+                EventLog.write("Ignored an unlock notice: the screen was not locked and then unlocked")
+            }
         }
     }
 
@@ -590,7 +602,7 @@ final class AppModel {
     }
 
     private func beginAttempt(_ trigger: String) {
-        guard attempt == nil, Screen.isLocked else { return }
+        guard attempt == nil, Screen.isLocked, Screen.isOnConsole else { return }
         refresh()
         guard isReady else {
             EventLog.write("Not scanning: \(statusText)")
@@ -621,7 +633,16 @@ final class AppModel {
         if showsNotch { notch.show(.scanning) }
         let scan = await recognize(learns: true)
         EventLog.write("Scan finished: \(scan.summary)")
+        refresh()
         guard Screen.isLocked, !Task.isCancelled else { return }
+        defer {
+            // The last attempt allowed has just been used.
+            if scan.charged, scan.outcome != .recognized, let reason = passwordRequiredReason {
+                syncNotifications()
+                notifier.post(reason)
+                notch.show(.passwordRequired, for: 4)
+            }
+        }
         switch scan.outcome {
         case .recognized:
             // Don't type over someone who is typing their own password.
@@ -649,7 +670,7 @@ final class AppModel {
             let typed = await Task.detached(priority: .userInitiated) { PasswordTyper.type(password) }.value
             EventLog.write(typed ? "Password typed" : "Typing could not be completed")
             // Success has been shown: put the notch away as the lock screen leaves.
-            notch.collapse()
+            notch.disarm()
             try? await Task.sleep(for: .seconds(3.5))
             guard Screen.isLocked, !Task.isCancelled else { return }
             // Never retry a password that didn't work; repeated failures can lock the account.
@@ -663,11 +684,11 @@ final class AppModel {
         case .notRecognized:
             history.add(.rejected, scan.summary)
             strangerAttempts += 1
-            reject("Face Not Recognized")
+            reject("Face Not Recognized", counted: scan.charged)
         case .spoof:
             history.add(.spoof, scan.summary)
             strangerAttempts += 1
-            reject("Couldn’t Confirm a Live Face")
+            reject("Couldn’t Confirm a Live Face", counted: scan.charged)
         case .noLiveness:
             history.add(.noLiveness, scan.summary)
             notch.show(.failure("Blink or Turn Your Head"), for: 6)
@@ -682,8 +703,8 @@ final class AppModel {
         }
     }
 
-    private func reject(_ message: String) {
-        policy.faceRejected()
+    private func reject(_ message: String, counted: Bool) {
+        if !counted { policy.faceRejected() }
         refresh()
         syncNotifications()
         if let reason = passwordRequiredReason {
@@ -703,6 +724,8 @@ final class AppModel {
         var modelScore: Float?
         var seconds: Double = 0
         var heldBack: FaceSample?
+        /// An attempt has already been counted against the limit.
+        var charged = false
 
         var summary: String {
             let score = best < 0 ? "no face" : String(format: "best match %.2f of %.2f needed", best, threshold)
@@ -766,6 +789,13 @@ final class AppModel {
                           FaceMath.bestSimilarity(vector, in: setup) >= FaceAdaptation.floor {
                     self.candidate = (vector, .now)
                 }
+            }
+            // Counted the moment the owner's face is recognised, and given back by a real
+            // unlock. So trying again and again with a recording, or giving up part way, can't
+            // dodge the limit.
+            if learns, !silent, scanner.reachedIdentity, !scan.charged {
+                scan.charged = true
+                self.policy.faceRejected()
             }
             guard scan.outcome == .scanning else { return false }
             // The challenge must be visible even with the animation turned off.

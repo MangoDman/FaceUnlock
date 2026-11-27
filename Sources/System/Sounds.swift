@@ -35,7 +35,7 @@ enum SoundEffect: String, CaseIterable, Identifiable {
     var taps: [(TimeInterval, NSHapticFeedbackManager.FeedbackPattern)] {
         switch self {
         // The ring meets itself, then the tick.
-        case .unlock: [(0.255, .alignment), (0.405, .levelChange)]
+        case .unlock: [(0.60, .alignment), (0.835, .levelChange)]
         // With the notch's shake.
         case .failure: [(0.042, .generic), (0.208, .generic), (0.375, .generic)]
         case .complete: [(0.30, .alignment), (0.80, .levelChange)]

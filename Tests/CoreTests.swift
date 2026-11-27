@@ -371,7 +371,8 @@ final class PipelineTests: XCTestCase {
     func testPasswordVouchesForANearMissButNotAStranger() {
         var face = enrolled
         XCTAssertFalse(face.learn(near(0.3), proof: .password, at: .now))
-        XCTAssertTrue(face.learn(near(0.5), proof: .password, at: .now))
+        XCTAssertFalse(face.learn(near(0.5), proof: .password, at: .now), "a lookalike's score")
+        XCTAssertTrue(face.learn(near(0.53), proof: .password, at: .now))
         XCTAssertEqual(face.updates.count, 1)
         XCTAssertEqual(face.primary, [near(1)], "the setup scan is never altered")
     }
@@ -385,9 +386,9 @@ final class PipelineTests: XCTestCase {
 
     func testUpdatesCannotDriftFromTheSetupScan() {
         var face = enrolled
-        XCTAssertTrue(face.learn(near(0.5), proof: .password, at: .now))
+        XCTAssertTrue(face.learn(near(0.55), proof: .password, at: .now))
         // Close to the update, too far from the setup scan.
-        var drifted = near(0.35)
+        var drifted = near(0.45)
         drifted = FaceMath.normalized(drifted)
         XCTAssertGreaterThan(FaceMath.similarity(drifted, face.updates[0].vector), 0.9)
         XCTAssertFalse(face.learn(drifted, proof: .password, at: .now))
@@ -487,5 +488,78 @@ final class PipelineTests: XCTestCase {
         XCTAssertEqual(NotchPresenter.sound(for: .failure("No"), after: .scanning), .failure)
         XCTAssertNil(NotchPresenter.sound(for: .scanning, after: .scanning))
         XCTAssertNil(NotchPresenter.sound(for: .closed, after: .success(nil)))
+    }
+
+    @MainActor func testTheNotchRestsAsAPadlockBesideTheCamera() {
+        let state = NotchState()
+        state.screen = .notch
+        state.notch = CGSize(width: 185, height: 32)
+        XCTAssertEqual(state.style, .compact, "as iPhone Duo shows it")
+        state.phase = .locked
+        XCTAssertFalse(state.isShut)
+        XCTAssertEqual(state.size, CGSize(width: 185 + 2 * NotchState.wing, height: 36))
+        state.preference = .expanded
+        XCTAssertTrue(state.isShut, "the other styles stay out of sight until there is something to show")
+        state.screen = .plain
+        state.preference = .automatic
+        XCTAssertEqual(state.style, .drop)
+        XCTAssertNil(NotchPresenter.sound(for: .locked, after: .success(nil)))
+    }
+
+    @MainActor func testMessagesKeepRoomBelowAndSuccessReplacesNothing() {
+        let state = NotchState()
+        state.screen = .notch
+        state.notch = CGSize(width: 185, height: 32)
+        state.preference = .compact
+        state.phase = .failure("Face Not Recognized")
+        // The words' block starts 6 points under the camera and is 92 tall.
+        XCTAssertGreaterThanOrEqual(state.size.height - (state.notch.height + 6 + 92), 16)
+        state.phase = .scanning
+        let looking = state.contentID
+        state.phase = .hint("Turn Your Head Left")
+        XCTAssertEqual(state.contentID, looking, "being asked to turn keeps the same face")
+        state.phase = .success(nil)
+        XCTAssertEqual(state.contentID, looking, "the face turns into the tick in place")
+    }
+
+    func testOnlyARealLockAndUnlockCount() {
+        var screen = LockTracker()
+        XCTAssertFalse(screen.unlockNotice(screenIsLocked: false), "a made-up unlock while in use")
+        XCTAssertFalse(screen.lockNotice(screenIsLocked: false), "a made-up lock")
+        XCTAssertFalse(screen.unlockNotice(screenIsLocked: false), "the pair, made up")
+        XCTAssertTrue(screen.lockNotice(screenIsLocked: true))
+        XCTAssertFalse(screen.unlockNotice(screenIsLocked: true), "a made-up unlock while locked")
+        XCTAssertTrue(screen.unlockNotice(screenIsLocked: false))
+        XCTAssertFalse(screen.unlockNotice(screenIsLocked: false), "twice")
+    }
+
+    func testLoweringAnyProtectionIsNoticed() {
+        let normal = SecuritySettings()
+        let changes: [(inout SecuritySettings) -> Void] = [
+            { $0.protection = .standard }, { $0.requiresAttention = false }, { $0.timeLimit = 180 },
+        ]
+        for change in changes {
+            var weaker = normal
+            change(&weaker)
+            XCTAssertTrue(weaker.isWeaker(than: normal))
+            XCTAssertFalse(normal.isWeaker(than: weaker))
+            XCTAssertEqual(normal.tightened(with: weaker), normal, "a tampered file can't lower anything")
+        }
+        var strict = normal
+        strict.protection = .maximum
+        strict.failureLimit = 3
+        XCTAssertFalse(strict.isWeaker(than: normal))
+        XCTAssertEqual(normal.tightened(with: strict), strict)
+    }
+
+    func testRecognitionIsRememberedEvenIfTheFaceThenLeaves() {
+        var scanner = UnlockScanner(rules: .init(challenge: .left))
+        for index in 0..<4 {
+            _ = scanner.process(FaceSample(), box: nil, similarity: 0.8, liveness: .confirmed, at: Double(index) * 0.1)
+        }
+        for index in 4..<20 {
+            _ = scanner.process(.none, box: nil, similarity: nil, liveness: .pending, at: Double(index) * 0.1)
+        }
+        XCTAssertTrue(scanner.reachedIdentity, "taking the recording away doesn't undo the attempt")
     }
 }

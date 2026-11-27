@@ -73,6 +73,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Unit tests host the app; leave the system alone there.
         guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
+        #if DEBUG
         if let index = CommandLine.arguments.firstIndex(of: "--snapshots"), CommandLine.arguments.count > index + 1 {
             Snapshots.render(to: URL(filePath: CommandLine.arguments[index + 1]), app: model)
             NSApp.terminate(nil)
@@ -115,7 +116,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 try? await Task.sleep(for: .seconds(1))
                 model.notch.show(.scanning)
                 try? await Task.sleep(for: .seconds(1.2))
+                // As at the higher protection levels: a request to turn, then recognition.
+                model.notch.show(.hint("Turn Your Head Left"))
+                try? await Task.sleep(for: .seconds(1.4))
                 print("success"); fflush(stdout)
+                try? await Task.sleep(for: .seconds(0.4))
                 await model.notch.showSuccess()
                 model.notch.collapse()
                 try? await Task.sleep(for: .seconds(1.5))
@@ -123,10 +128,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
             return
         }
+        #endif
         model.start()
         // Open quietly at login once everything works; otherwise show what's left to do.
         if !model.isReady { showSettings() }
+        #if DEBUG
         if CommandLine.arguments.contains("--setup") { requestSetup(.primary) }
+        #endif
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
@@ -170,8 +178,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// Asks for Touch ID or the password before a scan that would change existing face data.
     private func requestSetup(_ appearance: Appearance) {
         model.refresh()
-        let finishing = appearance == .primary && (!model.hasPassword || !model.accessibilityTrusted)
-        guard model.isSetUp, !finishing else { return showSetup(appearance) }
+        // Finishing an earlier setup (no new scan) needs nothing.
+        let finishing = appearance == .primary && model.isSetUp && (!model.hasPassword || !model.accessibilityTrusted)
+        // With a password saved, a new face could open the Mac, even if the face data has gone.
+        guard model.isSetUp || model.hasPassword, !finishing else { return showSetup(appearance) }
         Task {
             if await model.authorizeFaceChange("change your face data") { showSetup(appearance) }
         }
@@ -219,5 +229,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             window.makeKeyAndOrderFront(nil)
             window.orderFrontRegardless()
         }
+    }
+}
+
+/// Options used while developing (screenshots, animation tests). A released build ignores them.
+enum LaunchOptions {
+    static func has(_ option: String) -> Bool {
+        #if DEBUG
+        CommandLine.arguments.contains(option)
+        #else
+        false
+        #endif
     }
 }
