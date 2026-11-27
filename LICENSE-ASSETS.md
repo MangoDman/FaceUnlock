@@ -4,12 +4,24 @@ Copyright © 2026 MangoDman. All rights reserved.
 
 ## What is reserved
 
-Only the **sounds**: the sound effects in FaceUnlock’s downloads and the script that composes
-them. They are not part of this repository.
+Only the **sounds**: the sound effects in `Resources/Sounds/` and in FaceUnlock’s downloads,
+and the script that composes them, `Tools/make_sounds.py`. They are included in this repository
+so that FaceUnlock can be built as intended. Including them does not put them under the MIT
+License or give anyone any other right to them.
 
-Without written permission you may not copy, reuse, sell or share them, in whole or in part,
-including in another app, website, video or sound library. You may hear and use them as part of
-FaceUnlock itself.
+## What you may do
+
+- Hear and use them as part of FaceUnlock.
+- Build FaceUnlock from this repository, with its sounds, for your own personal use.
+- Fork this repository on GitHub, as GitHub’s terms allow. The sounds stay reserved in a fork.
+
+## What you may not do without written permission
+
+- Sell them, or sell anything that contains them.
+- Use them, or the script, in another app, website, video, game or sound library.
+- Copy, share or redistribute them separately, or in a changed or renamed version of
+  FaceUnlock that you give to others. Remove or replace them first.
+- Change them, or compose new sounds from the script, and use or share the results.
 
 ## Everything else
 

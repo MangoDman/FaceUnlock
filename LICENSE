@@ -1,5 +1,6 @@
-FaceUnlock's code is under the MIT License below. Only its sound effects are reserved:
-see LICENSE-ASSETS.md.
+FaceUnlock's code is under the MIT License below. Its sound effects (Resources/Sounds/)
+and the script that composes them (Tools/make_sounds.py) are NOT under the MIT License:
+all rights reserved, see LICENSE-ASSETS.md.
 
 --------------------------------------------------------------------------------
 

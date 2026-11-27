@@ -1,0 +1,4 @@
+FaceUnlock sound effects. Copyright (c) 2026 MangoDman. All rights reserved.
+
+Not covered by the MIT License. Use them only as part of FaceUnlock. Do not sell, copy,
+share or reuse them elsewhere without written permission. See LICENSE-ASSETS.md.

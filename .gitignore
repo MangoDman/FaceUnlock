@@ -13,9 +13,6 @@ Tools/convert_antispoof.py
 Screenshots/*
 !Screenshots/three-macs.png
 !Screenshots/readme/
-# Sounds are reserved (see LICENSE-ASSETS.md): kept off the public repository, and in the official download.
-Resources/Sounds/
-Tools/make_sounds.py
 # Downloads and converted weights
 *.onnx
 *.dmg

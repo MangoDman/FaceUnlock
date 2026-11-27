@@ -210,7 +210,7 @@ Intel Macs can run it on macOS 26 (macOS 27 drops Intel); `./Tools/install.sh` b
 
 ### Sounds
 
-The official download plays effects timed to the animations, with trackpad haptics on the same beats. **The sound files are not in this repository** ([they are reserved](LICENSE-ASSETS.md)), so an app you build yourself is silent. You can add your own WAV files to `Resources/Sounds`, named as in `Sources/System/Sounds.swift`.
+Effects timed to the animations play with trackpad haptics on the same beats. The files are in `Resources/Sounds`, and `Tools/make_sounds.py` composes them. **They are not under the MIT License:** use them only as part of FaceUnlock. Don’t sell, share or reuse them elsewhere ([details](LICENSE-ASSETS.md)).
 
 ## Project layout
 
@@ -246,7 +246,7 @@ FaceUnlock is inspired by Apple’s “Unlock with Front Camera” feature on iP
 | Part | Terms |
 |---|---|
 | Source code | Free to use, change and share under the [MIT License](LICENSE) |
-| Sounds | Reserved. Not to be copied or shared without written permission ([details](LICENSE-ASSETS.md)) |
+| Sounds | Included, but reserved. Use them only as part of FaceUnlock: no selling, sharing or reuse without written permission ([details](LICENSE-ASSETS.md)) |
 | Logo design, animations and transitions | Our own work; only the logo design is inspired by Apple. No rights reserved, and others can use them too |
 
 ### Third-party work
