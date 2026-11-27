@@ -93,6 +93,8 @@ Only do this for software you trust, or [build it yourself](#build-from-source).
 |:---:|:---:|:---:|
 | <img src="Screenshots/readme/setup-intro.png" width="240" alt="Setup introduction"> | <img src="Screenshots/readme/setup-capture.png" width="240" alt="Head turn scan"> | <img src="Screenshots/readme/setup-done.png" width="240" alt="Setup complete"> |
 
+FaceUnlock opens **Settings → Permissions** when something is missing, with a button for each step.
+
 1. Choose **Set Up Face Recognition** and complete the head-turn scan.
 2. Try **Settings → Face Unlock & Password → Test Recognition**. It types nothing and shows the match score.
 3. Enter your Mac password and allow **Accessibility** (and **Notifications** if you like).
@@ -109,6 +111,7 @@ If anything goes wrong, use your password or Touch ID as usual. **Settings → A
 
 | Page | What’s there |
 |---|---|
+| Permissions | Everything FaceUnlock needs, with a tick or a button for each |
 | General | Status, open at login, licences, support, detailed log |
 | Appearance | Style, preview as another Mac, which display, setup guide |
 | Face Unlock & Password | Password, appearances, the main switch, Test Recognition |

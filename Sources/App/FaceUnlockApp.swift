@@ -38,11 +38,14 @@ private struct MenuContent: View {
 
     var body: some View {
         Text(app.statusText)
-        if app.needsKeychainAccess {
-            Button { app.requestKeychainAccess() } label: { Label("Allow Keychain Access…", systemImage: "key") }
+        // The fix sits right under what's wrong.
+        if let need = app.need {
+            Button { app.resolve(need) { delegate.requestSetup($0) } } label: {
+                Label(need.button, systemImage: need.symbol)
+            }
         }
-        if app.needsAuthentication {
-            Button { app.confirmWithTouchID() } label: { Label("Confirm with Touch ID…", systemImage: "touchid") }
+        if app.stepsLeft > 0 {
+            Button { delegate.showPermissions() } label: { Label("All Permissions…", systemImage: "checklist") }
         }
         Divider()
         Button { Screen.lockNow() } label: { Label("Lock Screen", systemImage: "lock") }
@@ -133,6 +136,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         #endif
         model.start()
+        // Opened for you when something is missing, so there's nothing to hunt for.
+        if !Screen.isLocked, model.needsPermissionsAttention { showPermissions() }
         // Open quietly at login once everything works; otherwise show what's left to do.
         if !model.isReady { showSettings() }
         #if DEBUG
@@ -143,6 +148,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
         showSettings()
         return false
+    }
+
+    func showPermissions() {
+        UserDefaults.standard.set(SettingsPane.permissions.rawValue, forKey: "settingsSection")
+        showSettings()
     }
 
     func showSettings() {
@@ -179,7 +189,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     /// Asks for Touch ID or the password before a scan that would change existing face data.
-    private func requestSetup(_ appearance: Appearance) {
+    func requestSetup(_ appearance: Appearance) {
         model.refresh()
         // Finishing an earlier setup (no new scan) needs nothing.
         let finishing = appearance == .primary && model.isSetUp && (!model.hasPassword || !model.accessibilityTrusted)

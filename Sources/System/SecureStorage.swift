@@ -8,7 +8,9 @@ enum Keychain {
     private static let service = "com.faceunlock.mac"
 
     /// Unit tests run inside the app. They must never read, change or ask for the real items.
+    // Screenshot runs (`--demo`, development builds only) leave them alone too.
     private static let underTest = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+        || LaunchOptions.has("--demo")
 
     private static func query(_ account: String) -> [String: Any] {
         [kSecClass as String: kSecClassGenericPassword,

@@ -3,11 +3,12 @@ import SwiftUI
 
 /// Laid out like macOS System Settings: search, account header, grouped sidebar, back and forward.
 enum SettingsPane: String, CaseIterable, Identifiable {
-    case general, appearance, main, security, unlocking, alerts, activity, privacy
+    case permissions, general, appearance, main, security, unlocking, alerts, activity, privacy
     var id: String { rawValue }
 
     var title: String {
         switch self {
+        case .permissions: "Permissions"
         case .general: "General"
         case .appearance: "Appearance"
         case .main: "Face Unlock & Password"
@@ -21,6 +22,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
 
     var symbol: String {
         switch self {
+        case .permissions: "checklist"
         case .general: "gearshape.fill"
         case .appearance: "paintbrush.fill"
         case .main: "viewfinder"
@@ -34,6 +36,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
 
     var tint: Color {
         switch self {
+        case .permissions: .orange
         case .general: .gray
         case .appearance: .cyan
         case .main: .green
@@ -49,7 +52,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
     /// has no equivalent, and the tile is drawn here in the same style.
     var systemIcon: String? {
         switch self {
-        case .main, .security: nil
+        case .permissions, .main, .security: nil
         case .general: nil
         case .appearance: "Appearance"
         case .unlocking: "LockScreen"
@@ -61,6 +64,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
 
     var summary: String {
         switch self {
+        case .permissions: "Everything FaceUnlock needs, in one place."
         case .general: "About FaceUnlock, startup and support."
         case .appearance: "How the notch animation and face setup look."
         case .main: "Use the front camera to unlock your Mac."
@@ -75,6 +79,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
     /// Extra words the sidebar search matches.
     var keywords: String {
         switch self {
+        case .permissions: "permissions camera accessibility keychain notifications setup fix allow login"
         case .general: "about version login startup support website licences log"
         case .appearance: "notch island style animation display guide arcs ticks"
         case .main: "face scan appearance password touch id setup test permissions"
@@ -86,7 +91,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         }
     }
 
-    static let groups: [[SettingsPane]] = [[.general, .appearance], [.main, .security, .unlocking, .alerts], [.activity, .privacy]]
+    static let groups: [[SettingsPane]] = [[.permissions], [.general, .appearance], [.main, .security, .unlocking, .alerts], [.activity, .privacy]]
 }
 
 /// The signed-in Mac user's name and picture, read locally.
@@ -330,6 +335,7 @@ struct SettingsView: View {
         Form {
             header
             switch pane {
+            case .permissions: PermissionsPane(app: app, setUp: setUp)
             case .general: general
             case .appearance: appearancePane
             case .main: main
@@ -407,12 +413,15 @@ struct SettingsView: View {
             .padding(.vertical, 8)
         }
         Section {
-            LabeledContent("Status", value: app.statusText)
-            if app.needsKeychainAccess {
-                LabeledContent("Choose Always Allow when macOS asks") {
-                    Button("Allow Keychain Access…") { app.requestKeychainAccess() }
+            LabeledContent("Status") {
+                HStack(spacing: 10) {
+                    Text(app.statusText)
+                    if let need = app.need {
+                        Button(need.button) { app.resolve(need, setUp: setUp) }
+                    }
                 }
             }
+            if app.stepsLeft > 0 { link(.permissions) }
             Toggle("Open FaceUnlock at login", isOn: $app.launchAtLogin)
         }
         Section("About") {
@@ -512,17 +521,9 @@ struct SettingsView: View {
             link(.appearance)
         }
 
-        if !(app.cameraAuthorized && app.accessibilityTrusted && app.notificationsAllowed) {
-            Section("Permissions Needed") {
-                if !app.cameraAuthorized {
-                    permission("Camera", "com.apple.preference.security?Privacy_Camera")
-                }
-                if !app.accessibilityTrusted {
-                    permission("Accessibility", "com.apple.preference.security?Privacy_Accessibility")
-                }
-                if !app.notificationsAllowed {
-                    permission("Notifications", "com.apple.Notifications-Settings.extension")
-                }
+        if app.stepsLeft > 0 {
+            Section("Finish Setting Up") {
+                link(.permissions)
             }
         }
 
@@ -609,15 +610,6 @@ struct SettingsView: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-    }
-
-    private func permission(_ name: String, _ link: String) -> some View {
-        LabeledContent(name) {
-            Button("Open Settings…") {
-                if name == "Accessibility" { PasswordTyper.requestTrust() }
-                NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:\(link)")!)
-            }
-        }
     }
 
     // MARK: Unlocking

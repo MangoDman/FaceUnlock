@@ -198,16 +198,77 @@ final class AppModel {
     /// macOS would ask before handing over something saved, which can't happen at the lock screen.
     private(set) var needsKeychainAccess = false
 
+    /// What stands between you and a face unlock, most pressing first. The status line says it,
+    /// and the button beside it fixes it.
+    enum Need {
+        case keychain, face, switchedOff, paused, camera, password, accessibility, authentication
+
+        var button: String {
+            switch self {
+            case .keychain: "Allow Keychain Access…"
+            case .face: "Set Up Face…"
+            case .switchedOff: "Turn On"
+            case .paused: "Resume"
+            case .camera: "Allow Camera…"
+            case .password: "Add Password…"
+            case .accessibility: "Allow Accessibility…"
+            case .authentication: "Use Touch ID…"
+            }
+        }
+
+        var symbol: String {
+            switch self {
+            case .keychain: "key"
+            case .face: "viewfinder"
+            case .switchedOff: "power"
+            case .paused: "play"
+            case .camera: "camera"
+            case .password: "lock"
+            case .accessibility: "accessibility"
+            case .authentication: "touchid"
+            }
+        }
+    }
+
+    var need: Need? {
+        if needsKeychainAccess { return .keychain }
+        if !isSetUp { return .face }
+        if !isEnabled { return .switchedOff }
+        if isPaused { return .paused }
+        if !cameraAuthorized { return .camera }
+        if !hasPassword { return .password }
+        if !accessibilityTrusted { return .accessibility }
+        if passwordRequiredReason != nil { return .authentication }
+        return nil
+    }
+
     var statusText: String {
-        if needsKeychainAccess { return "Keychain access needed" }
-        if !isSetUp { return "Not set up" }
-        if !isEnabled { return "Off" }
-        if let pausedUntil, pausedUntil > .now { return "Paused until \(pausedUntil.formatted(date: .omitted, time: .shortened))" }
-        if !cameraAuthorized { return "Camera access needed" }
-        if !hasPassword { return "Password needed" }
-        if !accessibilityTrusted { return "Accessibility access needed" }
-        if passwordRequiredReason != nil { return "Paused. Touch ID or password needed" }
-        return "Ready"
+        switch need {
+        case .keychain: "Keychain access needed"
+        case .face: "Not set up"
+        case .switchedOff: "Off"
+        case .paused: "Paused until \(pausedUntil?.formatted(date: .omitted, time: .shortened) ?? "")"
+        case .camera: "Camera access needed"
+        case .password: "Password needed"
+        case .accessibility: "Accessibility access needed"
+        case .authentication: "Paused. Touch ID or password needed"
+        case nil: "Ready"
+        }
+    }
+
+    /// Does whatever the button beside the status says. `setUp` opens the setup window.
+    func resolve(_ need: Need, setUp: (Appearance) -> Void) {
+        switch need {
+        case .keychain: requestKeychainAccess()
+        case .face, .password: setUp(.primary)
+        case .switchedOff:
+            // The switch needs these first; setup collects whatever is missing.
+            if hasPassword, accessibilityTrusted { isEnabled = true } else { setUp(.primary) }
+        case .paused: resume()
+        case .camera: allowCamera()
+        case .accessibility: allowAccessibility()
+        case .authentication: confirmWithTouchID()
+        }
     }
 
     let camera = CameraService()
@@ -393,6 +454,80 @@ final class AppModel {
         }
         for await frame in stream {
             if Task.isCancelled || !handle(frame.result, frame.vector, frame.time) { break }
+        }
+    }
+
+    // MARK: Permissions
+
+    /// How many of the things it needs are still missing.
+    var stepsLeft: Int {
+        [isSetUp, hasPassword, cameraAuthorized, accessibilityTrusted, !needsKeychainAccess,
+         isEnabled && isSetUp].filter { !$0 }.count
+    }
+
+    /// Worth showing the checklist unasked: a new install, or switched on but unable to work.
+    var needsPermissionsAttention: Bool {
+        (!isSetUp && !hasPassword) || needsKeychainAccess || (isEnabled && !(cameraAuthorized && accessibilityTrusted))
+    }
+
+    func allowCamera() {
+        Task {
+            var allowed = await CameraService.requestAccess()
+            if !allowed {
+                await forgetPermission("Camera")
+                allowed = await CameraService.requestAccess()
+            }
+            if !allowed { openPrivacySettings("Privacy_Camera") }
+            refresh()
+        }
+    }
+
+    func allowAccessibility() {
+        Task {
+            if !PasswordTyper.isTrusted {
+                await forgetPermission("Accessibility")
+                // Puts FaceUnlock in the list, ready to be switched on.
+                PasswordTyper.requestTrust()
+                openPrivacySettings("Privacy_Accessibility")
+            }
+            refresh()
+        }
+    }
+
+    func allowNotifications() {
+        Task {
+            notificationsAllowed = await notifier.requestPermission()
+            if !notificationsAllowed {
+                NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension")!)
+            }
+        }
+    }
+
+    /// After an update macOS can hold a permission for the previous copy: it looks switched on
+    /// but isn't. Clearing FaceUnlock's own entry lets macOS ask properly. This only takes access
+    /// away; giving it is still up to you.
+    private func forgetPermission(_ service: String) async {
+        guard let identifier = Bundle.main.bundleIdentifier else { return }
+        await Task.detached {
+            let reset = Process()
+            reset.executableURL = URL(filePath: "/usr/bin/tccutil")
+            reset.arguments = ["reset", service, identifier]
+            try? reset.run()
+            reset.waitUntilExit()
+        }.value
+        EventLog.write("Cleared the old \(service) permission before asking again")
+    }
+
+    private func openPrivacySettings(_ section: String) {
+        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?\(section)")!)
+    }
+
+    func relaunch() {
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.createsNewApplicationInstance = true
+        NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: configuration) { _, error in
+            guard error == nil else { return }
+            Task { @MainActor in NSApp.terminate(nil) }
         }
     }
 
