@@ -471,6 +471,8 @@ final class PipelineTests: XCTestCase {
     }
 
     func testEverySoundEffectIsBundled() throws {
+        // The sounds are reserved and not in the repository, so builds from it have none.
+        try XCTSkipIf(SoundEffect.allCases.allSatisfy { $0.url == nil }, "This build has no sound effects")
         for effect in SoundEffect.allCases {
             let url = try XCTUnwrap(effect.url, "\(effect.rawValue).wav is missing")
             let player = try AVAudioPlayer(contentsOf: url)

@@ -85,7 +85,7 @@ Not confirmed: photo and video attempts against the liveness checks (tested on s
 
 ## Sounds
 
-Stereo effects for the notch opening and closing, unlocking, locking, refusals, alerts and setup, synthesised by `Tools/make_sounds.py` (no recordings). Their timing and the trackpad taps follow the animations. Turn them or the haptics off in **Settings → Alerts & Sounds**.
+The official download plays stereo effects for the notch, unlocking, locking, refusals, alerts and setup, timed to the animations, with trackpad haptics on the same beats. **The sound files are not in this repository** ([they are reserved](LICENSE-ASSETS.md)), so an app you build yourself is silent. You can add your own WAV files to `Resources/Sounds`, named as in `Sources/System/Sounds.swift`.
 
 ## Privacy
 

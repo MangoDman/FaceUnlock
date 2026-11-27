@@ -12,6 +12,9 @@ Tools/convert_antispoof.py
 # Design renders can show personal history; only the overview is published.
 Screenshots/*
 !Screenshots/three-macs.png
+# Reserved (see LICENSE-ASSETS.md): kept off the public repository, and in the official download.
+Resources/Sounds/
+Tools/make_sounds.py
 # Downloads and converted weights
 *.onnx
 *.dmg

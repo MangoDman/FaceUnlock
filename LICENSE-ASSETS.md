@@ -4,7 +4,8 @@ Copyright © 2026 MangoDman. All rights reserved.
 
 ## What this covers
 
-- **Sounds:** everything in `Resources/Sounds/`, and `Tools/make_sounds.py`, which composes them.
+- **Sounds:** the sound effects in FaceUnlock’s downloads and the script that composes them. They
+  are not part of this repository.
 - **Name and logos:** the name “FaceUnlock”, the face mark and the app icon, including
   `Resources/AppIcon.icon/`, `Sources/UI/FaceGlyph.swift`, `Tools/make_icon.swift`,
   `Tools/make_icon.sh` and `Tools/pad_icon.swift`.
