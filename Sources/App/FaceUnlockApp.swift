@@ -99,6 +99,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
             return
         }
+        // `--settings-test` opens Settings after a moment, to check it comes to the front.
+        if CommandLine.arguments.contains("--settings-test") {
+            Task {
+                try? await Task.sleep(for: .seconds(2))
+                showSettings()
+            }
+            return
+        }
         // `--unlock-test <style> <kind>` plays a successful unlock with the real timing.
         if let index = CommandLine.arguments.firstIndex(of: "--unlock-test"), CommandLine.arguments.count > index + 2 {
             model.notch.forcedStyle = NotchState.Preference(rawValue: CommandLine.arguments[index + 1])
@@ -198,8 +206,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         setupWindow = nil
     }
 
+    /// Brings a window in front of whatever is being used, on the current desktop. A menu bar
+    /// app isn't made active just by choosing from its menu, and the polite request to activate
+    /// can be ignored, which left windows opening behind other apps.
     private func present(_ window: NSWindow?) {
-        NSApp.activate()
-        window?.makeKeyAndOrderFront(nil)
+        guard let window else { return }
+        // After the menu has closed, or it takes the focus back.
+        DispatchQueue.main.async {
+            window.collectionBehavior.insert(.moveToActiveSpace)
+            if window.isMiniaturized { window.deminiaturize(nil) }
+            NSApp.activate(ignoringOtherApps: true)
+            window.makeKeyAndOrderFront(nil)
+            window.orderFrontRegardless()
+        }
     }
 }

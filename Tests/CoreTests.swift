@@ -1,4 +1,5 @@
 import CoreImage
+import AVFoundation
 import XCTest
 @testable import FaceUnlock
 
@@ -467,5 +468,13 @@ final class PipelineTests: XCTestCase {
         try await Task.sleep(for: .seconds(1.2))
         XCTAssertEqual(notch.state.phase, .closed)
         XCTAssertFalse(notch.isOnScreen)
+    }
+
+    func testEverySoundEffectIsBundled() throws {
+        for effect in SoundEffect.allCases {
+            let url = try XCTUnwrap(effect.url, "\(effect.rawValue).wav is missing")
+            let player = try AVAudioPlayer(contentsOf: url)
+            XCTAssertLessThan(player.duration, 1.5, "\(effect.rawValue) is too long for an effect")
+        }
     }
 }

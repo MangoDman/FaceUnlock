@@ -71,22 +71,31 @@ final class AppModel {
         case .unlock:
             // The whole unlock, as it looks at the lock screen.
             notch.show(.scanning)
+            Sounds.play(.scan)
             Task {
                 try? await Task.sleep(for: .seconds(1.8))
                 notch.show(.success(nil), for: 1.4)
+                Sounds.play(.unlock)
             }
         case .paused:
+            Sounds.play(.password)
             notch.show(.prompt(title: "Face Unlock Paused", message: UnlockPolicy.Reason.timedOut.message), for: 8)
         case .attempts: showAttempts(2)
         case .walkAway:
+            Sounds.play(.notice)
             notch.show(.notice(symbol: "figure.walk.departure", title: "Locking in 5 Seconds",
                                message: "You’ve stepped away. Move the pointer to stay."), for: 4)
-        case .success: notch.show(.success(nil), for: 2)
-        case .failure: notch.show(.failure("Face Not Recognized"), for: 3)
+        case .success:
+            notch.show(.success(nil), for: 2)
+            Sounds.play(.unlock)
+        case .failure:
+            notch.show(.failure("Face Not Recognized"), for: 3)
+            Sounds.play(.failure)
         }
     }
 
     private func showAttempts(_ count: Int) {
+        Sounds.play(.notice)
         notch.show(.notice(symbol: "person.crop.circle.badge.exclamationmark",
                            title: count == 1 ? "1 Unrecognized Attempt" : "\(count) Unrecognized Attempts",
                            message: "While your Mac was locked."), for: 8)
@@ -160,8 +169,14 @@ final class AppModel {
             applyLimits()
         }
     }
-    var soundOnUnlock = UserDefaults.standard.bool(forKey: "unlockSound") {
-        didSet { UserDefaults.standard.set(soundOnUnlock, forKey: "unlockSound") }
+    var soundEffects = Sounds.isOn {
+        didSet {
+            Sounds.isOn = soundEffects
+            if soundEffects, !oldValue { Sounds.play(.notice) }
+        }
+    }
+    var soundVolume = Sounds.volume {
+        didSet { Sounds.volume = soundVolume }
     }
 
     private func applyLimits() {
@@ -315,7 +330,10 @@ final class AppModel {
         promptedFor = reason
         EventLog.write("Asking for authentication: \(reason)")
         if alertsInCenter { notifier.post(reason) }
-        if alertsInNotch { notch.show(.prompt(title: "Face Unlock Paused", message: reason.message), for: 20) }
+        if alertsInNotch {
+            notch.show(.prompt(title: "Face Unlock Paused", message: reason.message), for: 20)
+            Sounds.play(.password)
+        }
     }
 
     /// Touch ID (or the password, in Apple's own dialog) counts as a recent authentication.
@@ -336,6 +354,7 @@ final class AppModel {
             syncNotifications()
             refresh()
             notch.show(.success("Face Unlock Is On"), for: 1.8)
+            Sounds.play(.unlock)
         }
     }
 
@@ -498,6 +517,7 @@ final class AppModel {
         wakePending = false
         EventLog.write("Screen locked. \(statusText)")
         guard isReady else { return }
+        Sounds.play(.lock)
 
         // Get the camera and the model ready now, so the first scan doesn't wait for them.
         camera.prepare()
@@ -584,6 +604,7 @@ final class AppModel {
         if let reason = passwordRequiredReason {
             EventLog.write("Not scanning: \(reason)")
             notch.show(.passwordRequired, for: 3)
+            Sounds.play(.password)
             // When the time limit has passed, look without unlocking, so the password that
             // follows can bring the face data up to date.
             if reason == .timedOut, adaptsToFace {
@@ -604,6 +625,7 @@ final class AppModel {
     private func runAttempt() async {
         notch.forcedKind = nil
         if showsNotch { notch.show(.scanning) }
+        Sounds.play(.scan)
         let scan = await recognize(learns: true)
         EventLog.write("Scan finished: \(scan.summary)")
         guard Screen.isLocked, !Task.isCancelled else { return }
@@ -616,7 +638,7 @@ final class AppModel {
                 return
             }
             if hapticOnUnlock { NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now) }
-            if soundOnUnlock { NSSound(named: "Glass")?.play() }
+            Sounds.play(.unlock)
             // The tick is drawn and seen at the lock screen before anything unlocks.
             if showsNotch { await notch.showSuccess() } else { try? await Task.sleep(for: .milliseconds(100)) }
             // Unlocked some other way in the meantime: that isn't a typing failure.
@@ -637,6 +659,7 @@ final class AppModel {
             // Never retry a password that didn't work; repeated failures can lock the account.
             EventLog.write("Still locked after typing: pausing until a manual unlock")
             typedAt = nil
+            Sounds.play(.password)
             policy.typingDidFail()
             history.add(.typingFailed)
             notifier.post(.typingFailed)
@@ -652,12 +675,15 @@ final class AppModel {
             reject("Couldn’t Confirm a Live Face")
         case .noLiveness:
             history.add(.noLiveness, scan.summary)
+            Sounds.play(.failure)
             notch.show(.failure("Blink or Turn Your Head"), for: 6)
         case .notAlone:
             history.add(.rejected, "Someone else was in view")
+            Sounds.play(.failure)
             notch.show(.failure("Someone Else Is in View"), for: 5)
         case .notAttentive:
             history.add(.noLiveness, "Not looking at the screen")
+            Sounds.play(.failure)
             notch.show(.failure("Look at the Screen"), for: 6)
         case .noFace, .scanning:
             notch.collapse()
@@ -671,8 +697,10 @@ final class AppModel {
         if let reason = passwordRequiredReason {
             notifier.post(reason)
             notch.show(.passwordRequired, for: 4)
+            Sounds.play(.password)
         } else {
             notch.show(.failure(message), for: 6)
+            Sounds.play(.failure)
         }
     }
 
@@ -778,9 +806,11 @@ final class AppModel {
                 return
             }
             notch.show(.scanning)
+            Sounds.play(.scan)
             let scan = await recognize()
             if Task.isCancelled { return }
             EventLog.write("Test: \(scan.summary)")
+            Sounds.play(scan.outcome == .recognized ? .unlock : .failure)
             switch scan.outcome {
             case .recognized:
                 notch.show(.success(nil), for: 1.8)
@@ -816,6 +846,7 @@ final class AppModel {
         }
         guard wantsLock else { return }
         // Warn first, and look again: any input cancels.
+        Sounds.play(.notice)
         notch.show(.notice(symbol: "figure.walk.departure", title: "Locking in 5 Seconds",
                            message: "You’ve stepped away. Move the pointer to stay."))
         try? await Task.sleep(for: .seconds(5))

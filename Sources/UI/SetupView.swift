@@ -73,6 +73,7 @@ final class SetupModel {
                     if let samePerson { templates.append(samePerson) }
                     progressAt = time
                     NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+                    if next.phase != .complete { Sounds.play(.capture) }
                 }
                 machine = next
 
@@ -103,6 +104,7 @@ final class SetupModel {
                     return false
                 }
                 step = .done
+                Sounds.play(.complete)
                 completedAt = time
                 return true
             }

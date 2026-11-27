@@ -747,9 +747,26 @@ struct SettingsView: View {
     }
 
     @ViewBuilder private var alerts: some View {
-        Section("When Unlocking") {
-            toggle("Play a Sound", "speaker.wave.2.fill", $app.soundOnUnlock)
-            toggle("Haptic Tap", "hand.tap", $app.hapticOnUnlock)
+        Section("Sounds & Haptics") {
+            toggle("Sound Effects", "speaker.wave.2.fill", $app.soundEffects)
+            if app.soundEffects {
+                Slider(value: $app.soundVolume, in: 0.1...1) {
+                    Text("Volume")
+                } minimumValueLabel: {
+                    Image(systemName: "speaker.fill").accessibilityLabel("Quieter")
+                } maximumValueLabel: {
+                    Image(systemName: "speaker.wave.3.fill").accessibilityLabel("Louder")
+                }
+                LabeledContent("Hear them") {
+                    Menu("Play") {
+                        ForEach(SoundEffect.allCases) { effect in
+                            Button(effect.title) { Sounds.play(effect) }
+                        }
+                    }
+                    .fixedSize()
+                }
+            }
+            toggle("Haptic Tap on Unlock", "hand.tap", $app.hapticOnUnlock)
         }
         Section {
             Picker("Alerts appear in", selection: $app.alertStyle) {

@@ -75,13 +75,17 @@ There is no public island API, so it is detected from the built-in display repor
 
 ## Status
 
-Confirmed on one MacBook Pro, macOS 27.0.1: recognition, real lock-screen unlocks with the 1.1 liveness, typing and animation code.
+Confirmed on one MacBook Pro, macOS 27.0.1: recognition, real lock-screen unlocks with the liveness, typing and animation code.
 
-Not confirmed: photo and video attempts against the 1.1 liveness checks (tested on simulated data only), the Maximum challenge, the head-turn setup scan, glasses and hat scans, another person, dim light, lock-when-you-leave, a real time-limit expiry, Intel Macs, and Macs without a notch or with a Dynamic Island.
+Not confirmed: photo and video attempts against the liveness checks (tested on simulated data only), the Maximum challenge, the head-turn setup scan, glasses and hat scans, another person, dim light, lock-when-you-leave, a real time-limit expiry, Intel Macs, and Macs without a notch or with a Dynamic Island.
 
 ## Website
 
 [faceunlock.app](https://faceunlock.app). Its source is kept separately.
+
+## Sounds
+
+Short effects for looking, unlocking, locking, refusals, alerts and setup, synthesised by `Tools/make_sounds.py` (no recordings). Turn them off or change the volume in **Settings → Alerts & Sounds**.
 
 ## Privacy
 
