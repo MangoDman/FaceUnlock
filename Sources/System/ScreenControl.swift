@@ -45,6 +45,28 @@ enum Screen {
     }
 }
 
+/// Keeps the display on while you're trying to get in, so it doesn't go black part way through a
+/// head turn or before you can try again. Always lets go by itself.
+@MainActor
+final class DisplayHold {
+    private var assertion = IOPMAssertionID(0)
+
+    /// Keeps the display on for at most `seconds` from now.
+    func hold(for seconds: TimeInterval) {
+        release()
+        // Restarts the lock screen's own countdown to turning the display off.
+        Screen.declareUserActivity()
+        IOPMAssertionCreateWithDescription(
+            kIOPMAssertionTypePreventUserIdleDisplaySleep as CFString, "FaceUnlock is looking for you" as CFString,
+            nil, nil, nil, seconds, kIOPMAssertionTimeoutActionRelease as CFString, &assertion)
+    }
+
+    func release() {
+        if assertion != 0 { IOPMAssertionRelease(assertion) }
+        assertion = 0
+    }
+}
+
 /// Types the saved password into the lock screen. This is the one place the password leaves the
 /// keychain; every event is preceded by a check that the screen is still locked, so it can't
 /// land in an app.

@@ -408,6 +408,11 @@ struct SettingsView: View {
         }
         Section {
             LabeledContent("Status", value: app.statusText)
+            if app.needsKeychainAccess {
+                LabeledContent("Choose Always Allow when macOS asks") {
+                    Button("Allow Keychain Access…") { app.requestKeychainAccess() }
+                }
+            }
             Toggle("Open FaceUnlock at login", isOn: $app.launchAtLogin)
         }
         Section("About") {

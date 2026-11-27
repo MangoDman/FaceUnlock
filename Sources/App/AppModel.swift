@@ -195,7 +195,11 @@ final class AppModel {
     }
     var needsAuthentication: Bool { isReady && passwordRequiredReason != nil }
 
+    /// macOS would ask before handing over something saved, which can't happen at the lock screen.
+    private(set) var needsKeychainAccess = false
+
     var statusText: String {
+        if needsKeychainAccess { return "Keychain access needed" }
         if !isSetUp { return "Not set up" }
         if !isEnabled { return "Off" }
         if let pausedUntil, pausedUntil > .now { return "Paused until \(pausedUntil.formatted(date: .omitted, time: .shortened))" }
@@ -214,6 +218,7 @@ final class AppModel {
     private let store = TemplateStore()
     private var policy = UnlockPolicy()
     private var screen = LockTracker()
+    private let display = DisplayHold()
 
     private var scanTask: Task<Void, Never>?
     private var cameraOwner: UUID?
@@ -246,10 +251,16 @@ final class AppModel {
         policy.window = window
         policy.timeout = TimeInterval(min(max(timeLimit, 5), 180) * 60)
         policy.maximumFailures = min(max(failureLimit, 1), 5)
-        SecurityStore.save(security)
+        // Never write over choices that couldn't be read.
+        if !SecurityStore.needsPermission { SecurityStore.save(security) }
         screen = LockTracker()
         if Screen.isLocked { _ = screen.lockNotice(screenIsLocked: true) }
         enrollment = store.load()
+        // Anything macOS wants to ask about is asked now, at the desktop, not at the lock screen.
+        if !Screen.isLocked, ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
+            _ = PasswordVault.load()
+        }
+        checkKeychain()
         refresh()
         EventLog.write("App started. Enabled \(isEnabled), set up \(isSetUp), password \(hasPassword), camera \(cameraAuthorized), accessibility \(accessibilityTrusted)")
 
@@ -383,6 +394,35 @@ final class AppModel {
         for await frame in stream {
             if Task.isCancelled || !handle(frame.result, frame.vector, frame.time) { break }
         }
+    }
+
+    // MARK: Keychain access
+
+    /// Looks, without asking anything, whether everything saved can be read.
+    private func checkKeychain() {
+        needsKeychainAccess = store.needsPermission || PasswordVault.needsPermission || SecurityStore.needsPermission
+        if needsKeychainAccess { EventLog.write("Keychain access needed: choose Always Allow when macOS asks") }
+    }
+
+    /// Lets macOS show its prompts. Only ever at the desktop, where they can be seen.
+    func requestKeychainAccess() {
+        guard !Screen.isLocked else { return }
+        let securityWasHidden = SecurityStore.needsPermission
+        NSApp.activate()
+        store.requestAccess()
+        _ = PasswordVault.load()
+        if securityWasHidden { security = SecurityStore.load() }
+        if enrollment.primary.isEmpty { enrollment = store.load() }
+        checkKeychain()
+        refresh()
+        syncNotifications()
+    }
+
+    private func showKeychainNotice() {
+        needsKeychainAccess = true
+        EventLog.write("Not scanning: keychain access needed")
+        notch.show(.notice(symbol: "key.fill", title: "Keychain Access Needed",
+                           message: "Sign in, then choose Always Allow."), for: 5)
     }
 
     // MARK: Enrollment and password
@@ -564,6 +604,7 @@ final class AppModel {
     private func screenUnlocked() {
         lockLoop?.cancel()
         scanTask?.cancel()
+        display.release()
         let byFace = typedAt.map { Date.now.timeIntervalSince($0) < 8 } ?? false
         notch.leaveLockScreen()
         EventLog.write("Screen unlocked by \(byFace ? "face" : "password or Touch ID")")
@@ -597,6 +638,7 @@ final class AppModel {
         // A typing failure found at the lock screen is explained once you're back.
         Task {
             try? await Task.sleep(for: .seconds(1.5))
+            if needsKeychainAccess { requestKeychainAccess() }
             promptIfNeeded()
         }
     }
@@ -604,6 +646,10 @@ final class AppModel {
     private func beginAttempt(_ trigger: String) {
         guard attempt == nil, Screen.isLocked, Screen.isOnConsole else { return }
         refresh()
+        // Found out before looking, not after, so nothing starts that can't finish.
+        if isEnabled, PasswordVault.needsPermission { return showKeychainNotice() }
+        // Allowed since the last look.
+        if needsKeychainAccess { checkKeychain() }
         guard isReady else {
             EventLog.write("Not scanning: \(statusText)")
             return
@@ -631,10 +677,13 @@ final class AppModel {
     private func runAttempt() async {
         notch.forcedKind = nil
         if showsNotch { notch.show(.scanning) }
+        display.hold(for: 30)
         let scan = await recognize(learns: true)
         EventLog.write("Scan finished: \(scan.summary)")
         refresh()
-        guard Screen.isLocked, !Task.isCancelled else { return }
+        guard Screen.isLocked, !Task.isCancelled else { return display.release() }
+        // Someone is there and didn't get in: time to read why and try again. Nobody: let it sleep.
+        if scan.outcome == .noFace { display.release() } else { display.hold(for: 20) }
         defer {
             // The last attempt allowed has just been used.
             if scan.charged, scan.outcome != .recognized, let reason = passwordRequiredReason {

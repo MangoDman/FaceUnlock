@@ -562,4 +562,10 @@ final class PipelineTests: XCTestCase {
         }
         XCTAssertTrue(scanner.reachedIdentity, "taking the recording away doesn't undo the attempt")
     }
+
+    func testTestsNeverTouchTheRealKeychain() {
+        XCTAssertEqual(Keychain.lookup("login-password"), .refused)
+        XCTAssertFalse(Keychain.write(Data(), account: "login-password"))
+        XCTAssertNil(PasswordVault.load())
+    }
 }

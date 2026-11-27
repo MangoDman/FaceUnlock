@@ -7,21 +7,50 @@ import Security
 enum Keychain {
     private static let service = "com.faceunlock.mac"
 
+    /// Unit tests run inside the app. They must never read, change or ask for the real items.
+    private static let underTest = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+
     private static func query(_ account: String) -> [String: Any] {
         [kSecClass as String: kSecClassGenericPassword,
          kSecAttrService as String: service,
          kSecAttrAccount as String: account]
     }
 
-    static func read(_ account: String) -> Data? {
+    enum Item: Equatable {
+        case value(Data), missing
+        /// It is there, but macOS won't hand it over without asking, or the request was turned down.
+        case refused
+    }
+
+    /// With `silently`, macOS is told not to ask. A keychain prompt on the lock screen is hidden
+    /// behind it and stops the app while it waits, so nothing is ever asked while locked.
+    static func lookup(_ account: String, silently: Bool = Screen.isLocked) -> Item {
+        if underTest { return .refused }
         var q = query(account)
         q[kSecReturnData as String] = true
+        var wasAllowed: DarwinBoolean = true
+        if silently {
+            // The only switch the login keychain's permission prompts obey.
+            SecKeychainGetUserInteractionAllowed(&wasAllowed)
+            SecKeychainSetUserInteractionAllowed(false)
+        }
+        defer { if silently { SecKeychainSetUserInteractionAllowed(wasAllowed.boolValue) } }
         var item: CFTypeRef?
-        return SecItemCopyMatching(q as CFDictionary, &item) == errSecSuccess ? item as? Data : nil
+        let status = SecItemCopyMatching(q as CFDictionary, &item)
+        if status == errSecSuccess, let data = item as? Data { return .value(data) }
+        return status == errSecItemNotFound ? .missing : .refused
     }
+
+    static func read(_ account: String) -> Data? {
+        if case .value(let data) = lookup(account) { data } else { nil }
+    }
+
+    /// True if reading it now would need your say-so. Never shows anything.
+    static func needsPermission(_ account: String) -> Bool { lookup(account, silently: true) == .refused }
 
     @discardableResult
     static func write(_ data: Data, account: String) -> Bool {
+        if underTest { return false }
         delete(account)
         var q = query(account)
         q[kSecValueData as String] = data
@@ -29,12 +58,15 @@ enum Keychain {
     }
 
     static func contains(_ account: String) -> Bool {
+        if underTest { return false }
         var q = query(account)
         q[kSecReturnAttributes as String] = true
         return SecItemCopyMatching(q as CFDictionary, nil) == errSecSuccess
     }
 
-    static func delete(_ account: String) { SecItemDelete(query(account) as CFDictionary) }
+    static func delete(_ account: String) {
+        if !underTest { SecItemDelete(query(account) as CFDictionary) }
+    }
 }
 
 /// The Mac login password, kept only if the user opts into automatic unlock.
@@ -42,6 +74,7 @@ enum PasswordVault {
     private static let account = "login-password"
 
     static var hasPassword: Bool { Keychain.contains(account) }
+    static var needsPermission: Bool { Keychain.needsPermission(account) }
 
     /// Checked against the local account first, so a typo is never replayed at the lock screen.
     static func verify(_ password: String) -> Bool {
@@ -144,15 +177,32 @@ struct TemplateStore {
 
     private static let keyAccount = "template-key"
 
+    /// Read once, so the keychain isn't asked again every time something is learned.
+    private final class Cache { var key: SymmetricKey? }
+    private let cache = Cache()
+
+    var needsPermission: Bool { Keychain.needsPermission(Self.keyAccount) }
+
+    /// Asks macOS for the key, showing its prompt if it wants one.
+    func requestAccess() { _ = Keychain.lookup(Self.keyAccount, silently: false) }
+
     private var url: URL {
         URL.applicationSupportDirectory.appending(path: "FaceUnlock/face.bin")
     }
 
     private func key() -> SymmetricKey? {
-        if let data = Keychain.read(Self.keyAccount) { return SymmetricKey(data: data) }
-        let key = SymmetricKey(size: .bits256)
-        let data = key.withUnsafeBytes { Data($0) }
-        return Keychain.write(data, account: Self.keyAccount) ? key : nil
+        if let key = cache.key { return key }
+        switch Keychain.lookup(Self.keyAccount) {
+        case .value(let data):
+            cache.key = SymmetricKey(data: data)
+        case .missing:
+            let new = SymmetricKey(size: .bits256)
+            if Keychain.write(new.withUnsafeBytes { Data($0) }, account: Self.keyAccount) { cache.key = new }
+        case .refused:
+            // The key exists. Replacing it would make the saved face data unreadable.
+            break
+        }
+        return cache.key
     }
 
     func load() -> Enrollment {
@@ -174,5 +224,6 @@ struct TemplateStore {
     func erase() {
         try? FileManager.default.removeItem(at: url)
         Keychain.delete(Self.keyAccount)
+        cache.key = nil
     }
 }

@@ -52,6 +52,8 @@ struct SecuritySettings: Codable, Equatable {
 enum SecurityStore {
     private static let account = "security-settings"
 
+    static var needsPermission: Bool { Keychain.needsPermission(account) }
+
     static func load() -> SecuritySettings {
         if let data = Keychain.read(account), let saved = try? JSONDecoder().decode(SecuritySettings.self, from: data) {
             return saved

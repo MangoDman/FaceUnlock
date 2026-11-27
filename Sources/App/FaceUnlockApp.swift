@@ -38,6 +38,9 @@ private struct MenuContent: View {
 
     var body: some View {
         Text(app.statusText)
+        if app.needsKeychainAccess {
+            Button { app.requestKeychainAccess() } label: { Label("Allow Keychain Access…", systemImage: "key") }
+        }
         if app.needsAuthentication {
             Button { app.confirmWithTouchID() } label: { Label("Confirm with Touch ID…", systemImage: "touchid") }
         }
