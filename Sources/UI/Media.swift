@@ -59,25 +59,26 @@ enum Media {
             if pill {
                 let shown = arrived * (1 - gone)
                 Circle().fill(.black)
-                    .frame(width: 96, height: 96)
-                    .overlay { glyph.frame(width: 70, height: 70) }
+                    .frame(width: 120, height: 120)
+                    .overlay { glyph.frame(width: FaceLayout.pill, height: FaceLayout.pill) }
                     .shadow(color: .black.opacity(0.35), radius: 12, y: 6)
-                    .offset(y: -100 + 110 * shown)
+                    .offset(y: -125 + 137 * shown)
             } else {
                 // Beside the camera: the padlock one side, the face the other.
                 let open = since.map { $0 >= UnlockGlyph.Beat.joined } ?? false
                 let width = 185 + 112 * (1 - gone), height = 32 + 4 * (1 - gone)
-                UnevenRoundedRectangle(bottomLeadingRadius: 18 - 7 * gone, bottomTrailingRadius: 18 - 7 * gone,
-                                       style: .continuous)
+                // The corners sweep out into the screen edge while it is open.
+                let flare = 8 * (1 - gone)
+                IslandShape(radius: 18 - 7 * gone, flare: flare, floating: false)
                     .fill(.black)
-                    .frame(width: width, height: height)
+                    .frame(width: width + 2 * flare, height: height)
                     .overlay {
                         HStack(spacing: 0) {
                             Image(systemName: open ? "lock.open.fill" : "lock.fill")
                                 .font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
                                 .frame(width: 56)
                             Spacer(minLength: 185)
-                            glyph.frame(width: 27, height: 27).opacity(arrived).frame(width: 56)
+                            glyph.frame(width: FaceLayout.wing, height: FaceLayout.wing).opacity(arrived).frame(width: 56)
                         }
                         .frame(width: 297)
                         .opacity(1 - gone)

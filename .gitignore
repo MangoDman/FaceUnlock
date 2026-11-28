@@ -11,7 +11,6 @@ Models/AntiSpoof.mlpackage/
 Tools/convert_antispoof.py
 # Design renders can show personal history; only the overview is published.
 Screenshots/*
-!Screenshots/three-macs.png
 !Screenshots/readme/
 # Downloads and converted weights
 *.onnx

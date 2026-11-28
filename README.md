@@ -44,6 +44,7 @@
 | | |
 |---|---|
 | **Beside the camera** | A padlock one side of the notch, your face the other. The face turns into a tick. |
+| **Shows you how** | The face turns or blinks to match what is asked, and message icons move. |
 | **Every Mac** | Notch, Dynamic Island, or a floating pill where there is neither. |
 | **Liveness checks** | Glare and device-frame detection, a blink or head depth, and an optional random head turn. |
 | **Appearances** | Separate scans for glasses, a hat and one alternate look, and it keeps up with you over time. |
@@ -58,6 +59,14 @@
 | Beside a notch or island | No notch |
 |:---:|:---:|
 | <img src="Screenshots/readme/unlock-compact.gif" width="400" alt="Compact unlock animation"> | <img src="Screenshots/readme/unlock-pill.gif" width="400" alt="Pill unlock animation"> |
+
+### Every moment
+
+The face shows you what to do, and each message has its own animated icon. Left to right: Notch, Pill and Compact.
+
+<p align="center">
+  <img src="Screenshots/readme/animations.gif" width="900" alt="The notch, pill and compact styles playing every message side by side: looking, head turns, recognized, refusals, password required, walking away, unrecognized attempts, keychain and paused">
+</p>
 
 ### Styles
 

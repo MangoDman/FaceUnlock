@@ -246,7 +246,7 @@ final class NotchState {
 }
 
 /// Square (or flared) at the screen edge, rounded below; rounded all round when `floating`.
-private struct IslandShape: Shape {
+struct IslandShape: Shape {
     var radius: CGFloat
     var flare: CGFloat
     var floating: Bool
