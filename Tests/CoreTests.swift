@@ -182,6 +182,49 @@ final class EnrollmentTests: XCTestCase {
         XCTAssertEqual(machine.guidance, .turnedTooFar)
     }
 
+    /// From a real scan that never finished: the nose measurement swung ±0.25 while the head
+    /// angles showed the person facing the camera.
+    func testJumpingNoseWithSteadyHeadAnglesStillFinishes() {
+        func at(_ nose: CGFloat, _ yaw: CGFloat, _ pitch: CGFloat) -> FaceSample {
+            FaceSample(yaw: nose, headYaw: yaw, headPitch: pitch)
+        }
+        // Straight ahead, with the nose reading well to one side.
+        feed(at(-0.26, -0.07, 0.23), seconds: 0.8)
+        XCTAssertEqual(machine.phase, .turning)
+        // A jumping nose alone is not a turn.
+        for _ in 0..<5 {
+            feed(at(0.24, 0.01, 0.2), seconds: 0.3)
+            feed(at(-0.26, -0.03, 0.22), seconds: 0.3)
+        }
+        XCTAssertTrue(machine.captured.isEmpty)
+        feed(at(0.5, 0.36, 0.2), seconds: 0.5)
+        feed(at(-0.63, -0.83, 0.13), seconds: 0.5)
+        feed(at(-0.3, -0.05, -0.39), seconds: 0.5)
+        feed(at(-0.07, -0.03, 0.55), seconds: 0.5)
+        XCTAssertEqual(machine.phase, .lookStraight)
+        // Back to facing the camera, not to the same nose reading.
+        feed(at(0.23, 0.02, 0.18), seconds: 0.8)
+        XCTAssertEqual(machine.phase, .complete)
+    }
+
+    func testTheLastStepNeverStaysStuck() {
+        feed(FaceSample())
+        for sample in [FaceSample(yaw: 0.35), FaceSample(yaw: -0.35), FaceSample(pitch: 0.43), FaceSample(pitch: 0.68)] {
+            feed(sample, seconds: 0.6)
+        }
+        XCTAssertEqual(machine.phase, .lookStraight)
+        feed(FaceSample(yaw: 0.5), seconds: EnrollmentMachine.longestFinish + 0.5)
+        XCTAssertEqual(machine.phase, .complete)
+    }
+
+    func testOneStrayFrameDoesNotRestartTheStart() {
+        let ahead = FaceSample(headYaw: 0, headPitch: 0.2), away = FaceSample(headYaw: 0.6, headPitch: 0.2)
+        feed(ahead, seconds: 0.3)
+        feed(away, seconds: 0.1)
+        feed(ahead, seconds: 0.3)
+        XCTAssertEqual(machine.phase, .turning)
+    }
+
     func testLosingTheFaceSaysWhichKindOfLoss() {
         feed(FaceSample.none)
         XCTAssertEqual(machine.guidance, .noFace)

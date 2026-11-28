@@ -7,8 +7,6 @@ final class SetupModel {
     var step: Step
     var machine = EnrollmentMachine()
     var errorMessage: String?
-    /// Extra help, shown only when a side is taking a while.
-    var hint: String?
     let appearance: Appearance
     private let app: AppModel
     private var templates: [[Float]] = []
@@ -45,36 +43,53 @@ final class SetupModel {
             restartScan()
             step = .capture
             var completedAt: TimeInterval?
-            var progressAt: TimeInterval?
             var loggedAt: TimeInterval = 0
+            var checkingSince: TimeInterval?
+            var failedCheck = false
             var smoothed: FaceSample?
             await app.watch { result, vector, time in
                 if let completedAt {
-                    // Keep the picture live behind the checkmark for a moment.
-                    return time - completedAt < 3
+                    // Keep the picture live while the tick draws, then switch the camera off.
+                    return time - completedAt < 1.2
                 }
                 // Smooth the jitter in landmark positions without adding noticeable lag.
                 var sample = result.sample
                 if let last = smoothed, sample.faceCount == 1, last.faceCount == 1 {
-                    sample.yaw = last.yaw * 0.4 + sample.yaw * 0.6
-                    sample.pitch = last.pitch * 0.4 + sample.pitch * 0.6
+                    sample.yaw = last.yaw * 0.2 + sample.yaw * 0.8
+                    sample.pitch = last.pitch * 0.2 + sample.pitch * 0.8
+                    if let before = last.headYaw, let now = sample.headYaw { sample.headYaw = before * 0.2 + now * 0.8 }
+                    if let before = last.headPitch, let now = sample.headPitch { sample.headPitch = before * 0.2 + now * 0.8 }
                 }
                 smoothed = sample
 
                 var next = machine
                 let wantsTemplate = next.process(sample, at: time)
+                // Before the tick: a fresh look must be recognised against what was just saved,
+                // exactly as unlocking will ask of it.
+                if next.phase == .complete {
+                    let match = vector.map { FaceMath.bestSimilarity($0, in: templates) } ?? -1
+                    if match < app.strictness.threshold {
+                        let started = checkingSince ?? time
+                        checkingSince = started
+                        if time - started < 3 { return true }
+                        EventLog.write(String(format: "Setup check failed: best match %.2f", match))
+                        failedCheck = true
+                        return false
+                    }
+                    EventLog.write(String(format: "Setup verified: match %.2f with %d templates", match, templates.count))
+                }
                 if wantsTemplate {
                     // Only ever store vectors that are the same person as the first, straight-on one.
                     let samePerson = vector.flatMap { v in
                         templates.first.map { FaceMath.similarity($0, v) > 0.2 } ?? true ? v : nil
                     }
-                    // The first and last shots must be good. A side view that doesn't match well still
-                    // lights its arc; it just isn't kept.
-                    if samePerson == nil, next.phase != .turning && next.phase != .lookStraight || templates.isEmpty {
+                    // The first shot must be good, as the rest are compared with it. A later one that
+                    // doesn't match well still counts as a step; it just isn't kept. The scan must
+                    // never stay stuck on a last picture.
+                    if samePerson == nil, templates.isEmpty {
                         return true
                     }
                     if let samePerson { templates.append(samePerson) }
-                    progressAt = time
                     // Each side climbs a step. The last frame is announced by the finish.
                     if next.phase != .complete {
                         let steps: [SoundEffect] = [.tap, .capture1, .capture2, .capture3, .capture4]
@@ -91,17 +106,6 @@ final class SetupModel {
                                           "\(machine.phase)", sample.faceCount, sample.yaw, sample.pitch,
                                           sample.headYaw ?? 0, sample.headPitch ?? 0, machine.captured.count))
                 }
-                if progressAt == nil { progressAt = time }
-                if machine.phase == .turning, time - (progressAt ?? time) > 3, let needed = machine.nextNeeded {
-                    hint = switch needed {
-                    case .left: "Turn your head a little to the left."
-                    case .right: "Turn your head a little to the right."
-                    case .up: "Tip your chin up a little."
-                    case .down: "Tip your chin down a little."
-                    }
-                } else {
-                    hint = nil
-                }
                 guard machine.phase == .complete else { return true }
                 do {
                     try app.saveEnrollment(templates, as: appearance)
@@ -116,9 +120,12 @@ final class SetupModel {
                 return true
             }
             if Task.isCancelled { return }
-            if step == .done {
+            if failedCheck {
+                errorMessage = "That didn’t verify. Face the camera in even light and try again."
+                step = .howTo
+            } else if step == .done {
+                // Stays on the tick until Done is pressed.
                 returnsToSettings = app.hasPassword && app.accessibilityTrusted
-                advanceAfterScan()
             } else if step == .capture {
                 errorMessage = "Setup was interrupted. Click Continue to try again."
                 step = .howTo
@@ -130,7 +137,6 @@ final class SetupModel {
         let turns = headTurns ?? machine.requiresHeadTurns
         machine = EnrollmentMachine(requiresHeadTurns: turns)
         templates = []
-        hint = nil
     }
 
     func advanceAfterScan() {
@@ -267,9 +273,16 @@ struct SetupView: View {
             }
             VStack(spacing: 4) {
                 let guidance = model.step == .done ? .done : model.machine.guidance
-                if let hint = model.hint, model.step == .capture, guidance.title == nil {
-                    Text(guidance.message).font(.title3)
-                    Text(hint).foregroundStyle(Theme.accent).transition(.opacity)
+                if guidance == .turnHead, let needed = model.machine.nextNeeded {
+                    // One thing to do at a time, though any side still grey counts.
+                    let ask = switch needed {
+                    case .left: "Look left"
+                    case .right: "Look right"
+                    case .up: "Look up"
+                    case .down: "Look down"
+                    }
+                    Text(ask).font(.title.bold()).contentTransition(.opacity)
+                    Text("\(model.machine.captured.count) of 4").foregroundStyle(.secondary).monospacedDigit()
                 } else if let title = guidance.title {
                     Text(title).font(.headline)
                     Text(guidance.message).foregroundStyle(.secondary)
@@ -279,7 +292,7 @@ struct SetupView: View {
             }
             .multilineTextAlignment(.center)
             .frame(height: 74)
-            .animation(.easeInOut(duration: 0.25), value: model.hint)
+            .animation(.easeInOut(duration: 0.2), value: model.machine.captured.count)
             Spacer(minLength: 0)
             if model.step == .capture {
                 Menu("Accessibility Options") {
@@ -296,6 +309,10 @@ struct SetupView: View {
                 }
                 .menuStyle(.button).buttonStyle(.glass).controlSize(.large).fixedSize()
                 .disabled(model.isFinishingScan)
+            } else if model.step == .done {
+                primary(model.returnsToSettings || (app.hasPassword && app.accessibilityTrusted) ? "Done" : "Continue") {
+                    model.advanceAfterScan()
+                }
             }
         }
     }

@@ -45,6 +45,36 @@ struct EnrollmentMachine {
     private var baseline = FaceSample()
     private var holdStart: TimeInterval?
     private var holding: Direction?
+    /// When the face was last as wanted, so one stray frame doesn't restart a hold.
+    private var lastGood: TimeInterval?
+    /// The head angles seen while settling, averaged into where "straight ahead" is for you.
+    private var settling: [FaceSample] = []
+    /// When this step, or the last captured side, began. Long waits make the scan more forgiving.
+    private var since: TimeInterval?
+
+    /// After this long on one step, a smaller movement is accepted.
+    static let patience: TimeInterval = 4
+    /// After this long looking for the last picture, the scan finishes with what it has.
+    static let longestFinish: TimeInterval = 2
+
+    /// Roughly facing the camera. Vision's head angles are used where it gives them: they stay
+    /// steady where the nose's place between the eyes can jump about, for instance with glasses.
+    /// The camera sits above the screen, and to one side for anyone using a second display, so
+    /// this is generous.
+    private func isRoughlyAhead(_ sample: FaceSample) -> Bool {
+        if let yaw = sample.headYaw, let pitch = sample.headPitch { return abs(yaw) < 0.32 && abs(pitch) < 0.48 }
+        return sample.isFacingScreen
+    }
+
+    /// True once things have been right for `duration`, forgiving gaps shorter than a quarter second.
+    private mutating func steady(_ good: Bool, for duration: TimeInterval, at time: TimeInterval) -> Bool {
+        if good {
+            lastGood = time
+            return held(for: duration, at: time)
+        }
+        if time - (lastGood ?? -1) > 0.25 { holdStart = nil }
+        return false
+    }
 
     /// Feeds one frame. Returns true when this frame should be saved as a face template.
     mutating func process(_ sample: FaceSample, at time: TimeInterval) -> Bool {
@@ -65,18 +95,25 @@ struct EnrollmentMachine {
         switch phase {
         case .positioning:
             guidance = .positionFace
-            guard sample.isCentred, sample.isFacingScreen, held(for: 0.8, at: time) else {
-                if !sample.isCentred || !sample.isFacingScreen { holdStart = nil }
+            let good = sample.isCentred && isRoughlyAhead(sample)
+            if good { settling.append(sample) }
+            guard steady(good, for: 0.3, at: time) else {
+                if holdStart == nil { settling = [] }
                 return false
             }
-            baseline = sample
+            baseline = Self.average(settling) ?? sample
             holdStart = nil
+            since = time
             phase = requiresHeadTurns ? .turning : .lookStraight
             guidance = requiresHeadTurns ? .turnHead : .lookStraight
             return true
 
         case .turning:
-            let motion = movement(sample)
+            if since == nil { since = time }
+            let ease: CGFloat = time - (since ?? time) > Self.patience ? 1.35 : 1
+            var motion = movement(sample)
+            motion.yaw *= ease
+            motion.pitch *= ease
             turn = CGVector(dx: -motion.yawSign * motion.yaw, dy: motion.pitchSign * motion.pitch)
             if motion.tooFar {
                 guidance = .turnedTooFar
@@ -102,9 +139,10 @@ struct EnrollmentMachine {
                 holding = direction
                 holdStart = nil
             }
-            guard held(for: 0.15, at: time) else { return false }
+            guard held(for: 0.1, at: time) else { return false }
             captured.insert(direction)
             holdStart = nil
+            since = time
             if captured.count == Direction.allCases.count {
                 phase = .lookStraight
                 guidance = .lookStraight
@@ -114,12 +152,14 @@ struct EnrollmentMachine {
 
         case .lookStraight:
             guidance = .lookStraight
-            let motion = movement(sample)
-            guard motion.yaw < 0.65, motion.pitch < 0.65 else {
-                holdStart = nil
-                return false
-            }
-            guard held(for: 0.6, at: time) else { return false }
+            if since == nil { since = time }
+            // Facing the camera again is enough: nobody can return to exactly the same spot. And
+            // if even that takes long, every side is already captured, so finish.
+            let waitedLong = time - (since ?? time) > Self.longestFinish
+            // No longer turned either way, so the last picture isn't of the final side.
+            let back = movement(sample)
+            let ahead = isRoughlyAhead(sample) && back.yaw < 0.9 && back.pitch < 0.9
+            guard steady(ahead, for: 0.2, at: time) || waitedLong else { return false }
             phase = .complete
             guidance = .done
             captured = Set(Direction.allCases)
@@ -131,19 +171,32 @@ struct EnrollmentMachine {
     }
 
     /// How far the head has moved from where it started, in units of "a deliberate turn" (1 is
-    /// enough). Two measurements are taken and the stronger one counts, because either can be
-    /// weak for a particular face: where the nose sits between the eyes, and Vision's head angle.
+    /// enough). Vision's head angles decide, signed the same way as the nose measurements:
+    /// +yaw toward the user's left, +pitch downward. The nose is only used where there are none.
     private func movement(_ sample: FaceSample) -> (yaw: CGFloat, yawSign: CGFloat, pitch: CGFloat,
                                                     pitchSign: CGFloat, tooFar: Bool) {
+        if let yaw = sample.headYaw, let pitch = sample.headPitch,
+           let startYaw = baseline.headYaw, let startPitch = baseline.headPitch {
+            let turn = yaw - startYaw, nod = pitch - startPitch
+            return (abs(turn) / 0.2, turn > 0 ? 1 : -1, abs(nod) / 0.15, nod > 0 ? 1 : -1,
+                    abs(turn) > 1.3 || abs(nod) > 1.1)
+        }
         let dy = sample.yaw - baseline.yaw
         let dp = sample.pitch - baseline.pitch
-        let angleYaw = abs((sample.headYaw ?? 0) - (baseline.headYaw ?? 0))
-        let anglePitch = abs((sample.headPitch ?? 0) - (baseline.headPitch ?? 0))
-        // The nose has to move a little in a direction before that direction is believed.
-        let yaw = abs(dy) > 0.035 ? max(abs(dy) / 0.13, angleYaw / 0.30) : 0
-        let pitch = abs(dp) > 0.018 ? max(abs(dp) / 0.06, anglePitch / 0.18) : 0
-        let tooFar = abs(dy) > 0.85 || angleYaw > 0.95 || abs(dp) > 0.34
+        let yaw = abs(dy) > 0.035 ? abs(dy) / 0.13 : 0
+        let pitch = abs(dp) > 0.018 ? abs(dp) / 0.06 : 0
+        let tooFar = abs(dy) > 0.85 || abs(dp) > 0.34
         return (yaw, dy > 0 ? 1 : -1, pitch, dp > 0 ? 1 : -1, tooFar)
+    }
+
+    private static func average(_ samples: [FaceSample]) -> FaceSample? {
+        guard var result = samples.last else { return nil }
+        func mean(_ values: [CGFloat]) -> CGFloat? { values.isEmpty ? nil : values.reduce(0, +) / CGFloat(values.count) }
+        result.yaw = mean(samples.map(\.yaw)) ?? result.yaw
+        result.pitch = mean(samples.map(\.pitch)) ?? result.pitch
+        result.headYaw = mean(samples.compactMap(\.headYaw))
+        result.headPitch = mean(samples.compactMap(\.headPitch))
+        return result
     }
 
     /// The next side still needed, in the order the lesson shows them.
