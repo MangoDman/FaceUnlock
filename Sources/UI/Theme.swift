@@ -4,9 +4,11 @@ import SwiftUI
 enum Theme {
     /// Setup progress, checkmark and buttons: system blue.
     static let accent = Color(nsColor: .systemBlue)
-    /// The notch glyph sweeps between these two.
-    static let glow = Color(red: 0.385, green: 0.847, blue: 0.980)
-    static let deep = Color(red: 0.133, green: 0.373, blue: 0.659)
+    /// The same blue on the black shape: Apple's system blue for dark backgrounds (0, 145, 255),
+    /// written out so it is the same wherever it is drawn. The face, icons and buttons use it.
+    static let glow = Color(red: 0, green: 145 / 255, blue: 1)
+    /// A shade of it, which the face breathes toward while looking.
+    static let deep = Color(red: 0, green: 0.36, blue: 0.68)
     /// App icon and settings badge, like the Face ID row in iOS Settings.
     static let iconTop = Color(red: 0.36, green: 0.89, blue: 0.47)
     static let iconBottom = Color(red: 0.10, green: 0.66, blue: 0.30)

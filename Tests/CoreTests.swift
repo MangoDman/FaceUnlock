@@ -182,6 +182,16 @@ final class EnrollmentTests: XCTestCase {
         XCTAssertEqual(machine.guidance, .turnedTooFar)
     }
 
+    func testLosingTheFaceSaysWhichKindOfLoss() {
+        feed(FaceSample.none)
+        XCTAssertEqual(machine.guidance, .noFace)
+        feed(FaceSample())
+        XCTAssertEqual(machine.phase, .turning)
+        XCTAssertEqual(feed(FaceSample.none), 0)
+        XCTAssertEqual(machine.guidance, .outOfView)
+        XCTAssertEqual(machine.guidance.title, "Face Out of View")
+    }
+
     /// A person who barely moves their nose but clearly turns (Vision's angle) must still progress.
     func testSmallNoseShiftWithClearHeadAngleCounts() {
         feed(FaceSample(headYaw: 0, headPitch: 0))

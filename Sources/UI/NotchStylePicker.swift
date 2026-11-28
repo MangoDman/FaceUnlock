@@ -81,7 +81,8 @@ private struct PullSlider: View {
             let x = drag ?? segment * CGFloat(selected)
             ZStack(alignment: .leading) {
                 Capsule().fill(.quaternary)
-                Capsule().fill(Theme.accent.gradient)
+                Color.clear
+                    .glassEffect(.regular.tint(Theme.accent), in: Capsule())
                     .frame(width: segment, height: 28)
                     .shadow(color: .black.opacity(0.3), radius: 2, y: 1)
                     // Stretches a little while pulled.

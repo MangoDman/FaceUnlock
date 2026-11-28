@@ -40,18 +40,20 @@ struct FaceGlyph: View {
                 arc.addArc(center: c, radius: radius, startAngle: .degrees(centre - 31),
                            endAngle: .degrees(centre + 31), clockwise: false)
                 context.stroke(arc, with: .color(color.opacity(0.55 + 0.45 * Double(lit))),
-                               style: StrokeStyle(lineWidth: s * 0.0288 * (1 + 0.4 * lit), lineCap: .round))
+                               style: StrokeStyle(lineWidth: s * 0.0288 * (1 + 0.75 * lit), lineCap: .round))
             }
 
-            // Head: narrows when it turns, flattens when it nods.
+            // The head stays round and still; only what is on it moves.
             let radius = s * 0.3236
-            let width = 2 * radius * (1 - 0.14 * abs(pose.yaw)), height = 2 * radius * (1 - 0.12 * abs(pose.pitch))
-            let head = CGRect(x: c.x - width / 2, y: c.y - height / 2, width: width, height: height)
+            let head = CGRect(x: c.x - radius, y: c.y - radius, width: radius * 2, height: radius * 2)
             context.stroke(Path(ellipseIn: head), with: .color(color.opacity(pose.ringOpacity)), lineWidth: s * 0.0422)
 
-            // Features slide toward the side the head faces.
-            let shift = CGPoint(x: c.x - pose.yaw * s * 0.075, y: c.y - pose.pitch * s * 0.06)
+            // Features slide toward the side the head faces. The nose stands out from the face,
+            // so it travels about twice as far as the eyes and mouth: that is what reads as a turn.
+            let shift = CGPoint(x: c.x - pose.yaw * s * 0.058, y: c.y - pose.pitch * s * 0.052)
+            let proud = CGPoint(x: -pose.yaw * s * 0.052, y: -pose.pitch * s * 0.045)
             func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: shift.x + x * s, y: shift.y + y * s) }
+            func tip(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: point(x, y).x + proud.x, y: point(x, y).y + proud.y) }
             let ink = GraphicsContext.Shading.color(color.opacity(pose.featureOpacity))
             func draw(_ path: Path, _ weight: CGFloat) {
                 context.stroke(path, with: ink, style: StrokeStyle(lineWidth: s * weight, lineCap: .round, lineJoin: .round))
@@ -70,10 +72,10 @@ struct FaceGlyph: View {
             draw(eyes, 0.0469)
             // Hooked nose.
             var nose = Path()
-            nose.move(to: point(0.0084, -0.0999))
-            nose.addLine(to: point(0.0084, 0.0025))
-            nose.addQuadCurve(to: point(-0.0173, 0.0281), control: point(0.0084, 0.0281))
-            nose.addLine(to: point(-0.0291, 0.0281))
+            nose.move(to: tip(0.0084, -0.0999))
+            nose.addLine(to: tip(0.0084, 0.0025))
+            nose.addQuadCurve(to: tip(-0.0173, 0.0281), control: tip(0.0084, 0.0281))
+            nose.addLine(to: tip(-0.0291, 0.0281))
             draw(nose, 0.0414)
             var smile = Path()
             smile.move(to: point(-0.0952, 0.1021))

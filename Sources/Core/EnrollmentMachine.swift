@@ -7,13 +7,21 @@ struct EnrollmentMachine {
     enum Phase: Equatable { case positioning, turning, lookStraight, complete }
 
     enum Guidance: Equatable {
-        case positionFace, turnHead, turnedTooFar, lookStraight, tooDark, moveCloser, oneFaceOnly, done
+        case positionFace, noFace, outOfView, turnHead, turnedTooFar, lookStraight, tooDark, moveCloser, oneFaceOnly, done
 
-        var title: String? { self == .turnedTooFar ? "Head Turned Too Far" : nil }
+        var title: String? {
+            switch self {
+            case .noFace: "No Face Detected"
+            case .outOfView: "Face Out of View"
+            case .turnedTooFar: "Head Turned Too Far"
+            default: nil
+            }
+        }
 
         var message: String {
             switch self {
-            case .positionFace: "Position your face within the frame."
+            case .positionFace, .noFace: "Position your face within the frame."
+            case .outOfView: "Reposition your face within the frame."
             case .turnHead: "Slowly turn your head left, right, up, and down."
             case .turnedTooFar: "Slowly turn your head back toward the camera."
             case .lookStraight: "Look straight ahead."
@@ -45,7 +53,7 @@ struct EnrollmentMachine {
         let problem: Guidance? =
             sample.isTooDark ? .tooDark
             : sample.faceCount > 1 ? .oneFaceOnly
-            : sample.faceCount == 0 ? (phase == .turning ? .turnedTooFar : .positionFace)
+            : sample.faceCount == 0 ? (phase == .positioning ? .noFace : .outOfView)
             : sample.size < 0.2 ? .moveCloser
             : nil
         if let problem {

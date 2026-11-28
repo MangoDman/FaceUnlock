@@ -265,6 +265,7 @@ struct SidebarIcon: View {
                 }
             }
             .frame(width: 20, height: 20)
+            .glassy()
             .frame(width: 25, height: 25)
         }
     }
@@ -299,6 +300,7 @@ struct RowLabel: View {
                 Image(systemName: symbol).font(.system(size: 11.5, weight: .semibold)).foregroundStyle(tint.gradient)
             }
             .frame(width: 20, height: 20)
+            .glassy()
             .accessibilityHidden(true)
             Text(title)
         }
@@ -316,6 +318,7 @@ struct SymbolTile: View {
             .foregroundStyle(.white)
             .frame(width: size, height: size)
             .background(tint.gradient, in: RoundedRectangle(cornerRadius: size * 0.26, style: .continuous))
+            .glassy()
     }
 }
 

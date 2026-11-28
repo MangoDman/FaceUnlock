@@ -40,6 +40,23 @@ private extension NSScreen {
     }
 }
 
+/// The words the three views share.
+private enum Words {
+    static let retry = "Point here to try again"
+    static let password = "Use Touch ID or type your password"
+}
+
+/// The measurements the three views share, so a state is laid out alike in each.
+enum FaceLayout {
+    /// The face while it is the whole of the Notch's panel, and in the Pill's circle.
+    static let notch: CGFloat = 96, pill: CGFloat = 100
+    /// The face (or padlock) above a message in the Pill and Compact.
+    static let card: CGFloat = 76
+    /// Beside the camera in Compact, which is only as tall as the notch.
+    static let wing: CGFloat = 27
+    static let gap: CGFloat = 6
+}
+
 @MainActor @Observable
 final class NotchState {
     /// What the user picked in Settings.
@@ -126,11 +143,11 @@ final class NotchState {
             // Waiting just above the screen.
             case .plain: Drop(top: -70, width: 60, height: 60, radius: 30)
             }
-        case .scanning, .success(nil): Drop(top: rest, width: 96, height: 96, radius: 48)
-        case .hint: Drop(top: rest, width: 260, height: 140, radius: 40)
-        case .success, .failure, .passwordRequired: Drop(top: rest, width: 260, height: 112, radius: 38)
-        case .notice: Drop(top: rest, width: 300, height: 116, radius: 38)
-        case .prompt: Drop(top: rest, width: 340, height: 178, radius: 38)
+        case .scanning, .success(nil): Drop(top: rest, width: 120, height: 120, radius: 60)
+        case .hint: Drop(top: rest, width: 260, height: 164, radius: 38)
+        case .success, .failure, .passwordRequired: Drop(top: rest, width: 260, height: 147, radius: 38)
+        case .notice: Drop(top: rest, width: 300, height: 147, radius: 38)
+        case .prompt: Drop(top: rest, width: 340, height: 209, radius: 38)
         }
     }
 
@@ -154,6 +171,11 @@ final class NotchState {
         }
     }
 
+    /// What the face should be acting out.
+    var cue: FaceCue? {
+        if case .hint(let text) = phase { FaceCue(text) } else { nil }
+    }
+
     var isSuccess: Bool {
         if case .success = phase { true } else { false }
     }
@@ -170,18 +192,22 @@ final class NotchState {
         case .expanded, .island:
             let narrow = max(notch.width + 40, 236), wide = max(notch.width + 40, 346)
             return switch phase {
-            case .notice: CGSize(width: wide, height: notch.height + 118)
-            case .prompt: CGSize(width: wide, height: notch.height + 174)
-            default: CGSize(width: narrow, height: notch.height + 140)
+            case .notice: CGSize(width: wide, height: notch.height + 147)
+            case .prompt: CGSize(width: wide, height: notch.height + 207)
+            // Two lines of words under the face need a little more.
+            case .hint, .failure, .passwordRequired: CGSize(width: narrow, height: notch.height + 168)
+            default: CGSize(width: narrow, height: notch.height + 152)
             }
         case .compact:
             let wide = max(notch.width + 2 * Self.wing, 344)
             return switch phase {
             case .closed: notch
             case .locked, .scanning, .success(nil): CGSize(width: notch.width + 2 * Self.wing, height: max(notch.height, 36))
-            case .hint: CGSize(width: wide, height: max(notch.height, 36) + 48)
-            case .success, .failure, .passwordRequired, .notice: CGSize(width: wide, height: notch.height + 118)
-            case .prompt: CGSize(width: wide, height: notch.height + 174)
+            case .hint: CGSize(width: wide, height: max(notch.height, 36) + 54)
+            // One line of words rather than two.
+            case .success: CGSize(width: wide, height: notch.height + 131)
+            case .failure, .passwordRequired, .notice: CGSize(width: wide, height: notch.height + 147)
+            case .prompt: CGSize(width: wide, height: notch.height + 207)
             }
         }
     }
@@ -191,12 +217,20 @@ final class NotchState {
         if isShut { return screen == .notch ? 11 : notch.height / 2 }
         return switch style {
         case .expanded, .island: 38
-        default: isCompactView ? 18 : 30
+        default: isCompactView ? 18 : 38
         }
     }
 
     /// The concave corners that flare the expanded notch into the screen edge.
-    var flare: CGFloat { style == .expanded && !isShut ? 16 : 0 }
+    var flare: CGFloat {
+        guard !isShut, !floating else { return 0 }
+        return switch style {
+        case .expanded: 16
+        // Smaller on the bar, which is only as deep as the notch.
+        case .compact: isCompactView ? 8 : 16
+        default: 0
+        }
+    }
 
     /// Whether the shape floats with all four corners rounded.
     var floating: Bool { style == .island || (style == .compact && screen != .notch) }
@@ -365,33 +399,42 @@ struct NotchView: View {
         case .closed, .locked:
             EmptyView()
         case .notice(let name, let heading, let message):
-            card { symbol(name, Theme.glow).symbolEffect(.bounce, value: heading) } text: {
+            card { NoticeIcon(symbol: name, frozenAt: frozenAt) } text: {
                 title(heading)
                 detail(message)
             }
         case .prompt(let heading, let message):
-            promptContent(heading, message).padding(.top, state.notch.height + 6)
+            promptContent(heading, message).padding(.top, state.notch.height + 18)
         default:
-            VStack(spacing: 8) {
-                glyph.frame(width: 66, height: 66)
-                switch state.phase {
-                case .success(nil): OpeningLock(finished: frozenAt != nil)
-                case .success(let text?): centred(text)
-                // Gone at once on recognition, so it never lies over the padlock.
-                case .scanning: centred("Looking for You").transition(.asymmetric(insertion: .opacity, removal: .identity))
-                case .hint(let text): centred(text).transition(.asymmetric(insertion: .opacity, removal: .identity))
-                case .failure(let text):
-                    centred(text)
-                    detail("Move the pointer here to try again")
-                case .passwordRequired:
-                    centred("Password Required")
-                    detail("Use Touch ID or type your password")
-                default: EmptyView()
+            VStack(spacing: FaceLayout.gap) {
+                glyph.frame(width: FaceLayout.notch, height: FaceLayout.notch)
+                VStack(spacing: 2) {
+                    switch state.phase {
+                    case .success(nil): OpeningLock(finished: frozenAt != nil)
+                    case .success(let text?): title(text)
+                    // Gone at once on recognition, so it never lies over the padlock.
+                    case .scanning: title("Looking for You").transition(.asymmetric(insertion: .opacity, removal: .identity))
+                    case .hint(let text):
+                        Group {
+                            title(text)
+                            detail(FaceCue(text)?.followUp ?? "")
+                        }
+                        .transition(.asymmetric(insertion: .opacity, removal: .identity))
+                    case .failure(let text):
+                        title(text)
+                        detail(Words.retry)
+                    case .passwordRequired:
+                        title("Password Required")
+                        detail(Words.password)
+                    default: EmptyView()
+                    }
                 }
+                // The padlock and the words take the same room, so the face never shifts.
+                .frame(minHeight: 18)
             }
             .multilineTextAlignment(.center)
-            .padding(.horizontal, 14)
-            .padding(.top, state.notch.height + 6)
+            .padding(.horizontal, 10)
+            .padding(.top, state.notch.height + 14)
         }
     }
 
@@ -436,20 +479,20 @@ struct NotchView: View {
             EmptyView()
         case .scanning, .hint, .success(nil):
             VStack(spacing: 4) {
-                // Always the same 70 points, 13 from the top of the pill, whatever follows.
-                glyph.frame(width: 70, height: 70)
+                // Always the same size, 10 from the top of the pill, whatever follows.
+                glyph.frame(width: FaceLayout.pill, height: FaceLayout.pill)
                 if case .hint(let text) = state.phase {
                     VStack(spacing: 2) {
                         title(text)
-                        detail("Then look back at the camera")
+                        detail(FaceCue(text)?.followUp ?? "")
                     }
                     .transition(.asymmetric(insertion: .opacity, removal: .identity))
                 }
             }
-            .padding(.top, 13)
+            .padding(.top, 10)
             .frame(maxHeight: .infinity, alignment: .top)
         case .notice(let name, let heading, let message):
-            stack { symbol(name, Theme.glow).symbolEffect(.bounce, value: heading) } text: {
+            stack { NoticeIcon(symbol: name, frozenAt: frozenAt) } text: {
                 title(heading)
                 detail(message)
             }
@@ -460,12 +503,12 @@ struct NotchView: View {
         case .failure(let text):
             stack { glyph } text: {
                 title(text)
-                detail("Point here to try again")
+                detail(Words.retry)
             }
         case .passwordRequired:
             stack { glyph } text: {
                 title("Password Required")
-                detail("Touch ID or type your password")
+                detail(Words.password)
             }
         }
     }
@@ -487,17 +530,17 @@ struct NotchView: View {
             } trailing: {
                 ZStack {
                     if state.phase != .locked {
-                        UnlockGlyph(success: state.isSuccess, frozenAt: frozenAt).transition(.opacity)
+                        UnlockGlyph(success: state.isSuccess, frozenAt: frozenAt, cue: state.cue).transition(.opacity)
                     }
                 }
-                .frame(width: 27, height: 27)
+                .frame(width: FaceLayout.wing, height: FaceLayout.wing)
             }
             // A fixed width, so the lock and the face don't move when the shape widens.
             .frame(width: state.notch.width + 2 * NotchState.wing)
             if case .hint(let text) = state.phase {
                 VStack(spacing: 2) {
                     title(text)
-                    detail("Then look back at the camera")
+                    detail(FaceCue(text)?.followUp ?? "")
                 }
                 .padding(.top, 4)
                 .transition(.asymmetric(insertion: .opacity, removal: .identity))
@@ -508,20 +551,20 @@ struct NotchView: View {
         case .failure(let text):
             card { glyph } text: {
                 title(text)
-                detail("Point here to try again")
+                detail(Words.retry)
             }
         case .passwordRequired:
             card { glyph } text: {
                 title("Password Required")
-                detail("Touch ID or type your password")
+                detail(Words.password)
             }
         case .notice(let name, let heading, let message):
-            card { symbol(name, Theme.glow).symbolEffect(.bounce, value: heading) } text: {
+            card { NoticeIcon(symbol: name, frozenAt: frozenAt) } text: {
                 title(heading)
                 detail(message)
             }
         case .prompt(let heading, let message):
-            promptContent(heading, message).padding(.top, state.notch.height + 6)
+            promptContent(heading, message).padding(.top, state.notch.height + 18)
         }
     }
 
@@ -529,26 +572,26 @@ struct NotchView: View {
 
     @ViewBuilder private var glyph: some View {
         switch state.phase {
-        case .failure: FaceGlyph(color: .white)
-        case .passwordRequired: Image(systemName: "lock.fill").font(.system(size: 32)).foregroundStyle(.white)
+        case .failure(let text): RefusedFace(message: text, frozenAt: frozenAt).id(text)
+        case .passwordRequired: LockIcon(colour: .white, frozenAt: frozenAt).padding(1).scaleEffect(0.91)
         // One view for looking, hints and success.
-        default: UnlockGlyph(success: state.isSuccess, frozenAt: frozenAt)
+        default: UnlockGlyph(success: state.isSuccess, frozenAt: frozenAt, cue: state.cue)
         }
     }
 
     private func promptContent(_ heading: String, _ message: String) -> some View {
-        VStack(spacing: 10) {
-            stack { symbol("lock.fill", Theme.glow) } text: {
+        VStack(spacing: 12) {
+            stack { NoticeIcon(symbol: "lock.fill", frozenAt: frozenAt) } text: {
                 title(heading)
-                detail(message)
+                // What happened on one line, what to do on the next.
+                detail(message.replacingOccurrences(of: ". ", with: ".\n"))
             }
             // Two capsules, as on the island's AirDrop card.
             HStack(spacing: 10) {
-                capsule("Not Now", fill: Color.white.opacity(0.16), ink: .white) { state.onDismiss?() }
-                capsule("Use Touch ID", fill: Color(nsColor: .systemBlue).opacity(0.28),
-                        ink: Color(red: 0.42, green: 0.71, blue: 1)) { state.onConfirm?() }
+                capsule("Not Now", fill: Color.white.opacity(0.13)) { state.onDismiss?() }
+                capsule("Use Touch ID", fill: Theme.glow) { state.onConfirm?() }
             }
-            .padding(.horizontal, 18)
+            .padding(.horizontal, 16)
         }
     }
 
@@ -564,14 +607,14 @@ struct NotchView: View {
     /// A message below the camera, with equal space above and below it.
     private func card(@ViewBuilder icon: () -> some View, @ViewBuilder text: () -> some View) -> some View {
         stack(icon: icon, text: text)
-            .frame(height: state.style == .compact ? 92 : 94)
-            .padding(.top, state.notch.height + 6)
+            .padding(.top, state.notch.height + 18)
     }
 
     /// Symbol on top, words under it, everything on the centre line.
     private func stack(@ViewBuilder icon: () -> some View, @ViewBuilder text: () -> some View) -> some View {
-        VStack(spacing: 6) {
-            icon().frame(width: 40, height: 40)
+        VStack(spacing: 8) {
+            // The picture's own height, so the room around it is what you see.
+            icon().frame(width: FaceLayout.card, height: FaceLayout.card).frame(height: 70)
             VStack(spacing: 2, content: text)
         }
         .multilineTextAlignment(.center)
@@ -579,26 +622,17 @@ struct NotchView: View {
         .frame(maxWidth: .infinity)
     }
 
-    private func capsule(_ label: String, fill: Color, ink: Color, action: @escaping () -> Void) -> some View {
+    private func capsule(_ label: String, fill: Color, action: @escaping () -> Void) -> some View {
         Button {
             Sounds.play(.tap)
             action()
         } label: {
-            Text(label).font(.system(size: 14, weight: .semibold)).foregroundStyle(ink)
-                .frame(maxWidth: .infinity).frame(height: 38)
+            Text(label).font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
+                .frame(maxWidth: .infinity).frame(height: 36)
                 .background(fill, in: Capsule())
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-    }
-
-    private func symbol(_ name: String, _ colour: Color) -> some View {
-        Image(systemName: name).font(.system(size: 26, weight: .medium)).foregroundStyle(colour)
-    }
-
-    private func centred(_ text: String) -> some View {
-        Text(text).font(.system(size: 12.5, weight: .semibold)).foregroundStyle(.white.opacity(0.92))
-            .contentTransition(.opacity)
     }
 
     private func title(_ text: String) -> some View {

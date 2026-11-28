@@ -51,7 +51,7 @@ final class SetupModel {
             await app.watch { result, vector, time in
                 if let completedAt {
                     // Keep the picture live behind the checkmark for a moment.
-                    return time - completedAt < 2.2
+                    return time - completedAt < 3
                 }
                 // Smooth the jitter in landmark positions without adding noticeable lag.
                 var sample = result.sample
@@ -242,7 +242,7 @@ struct SetupView: View {
     }
 
     private var howTo: some View {
-        page(title: model.appearance == .primary ? "How to Set Up Face Recognition" : "Set Up “\(model.appearance.title)”",
+        page(title: model.appearance == .primary ? "How to Set Up\nFace Recognition" : "Set Up “\(model.appearance.title)”",
              text: (model.appearance.preparation.map { $0 + "\n\n" } ?? "") + "First, position your face in the camera frame. Then slowly turn your head left, right, up, and down to show all the angles of your face.") {
             InstructionGlyph()
         } buttons: {
@@ -303,7 +303,7 @@ struct SetupView: View {
     private var passwordStep: some View {
         page(title: "Enter Your Mac Password",
              text: "To unlock the screen, FaceUnlock types your password for you. It’s checked now, saved in your login keychain, and never sent anywhere.") {
-            Image(systemName: "key.fill").font(.system(size: 54)).foregroundStyle(.tint)
+            Image(systemName: "key.fill").font(.system(size: 54)).foregroundStyle(.tint).glassy()
         } extra: {
             SecureField("Password", text: $password)
                 .textFieldStyle(.roundedBorder).controlSize(.large)
@@ -324,7 +324,7 @@ struct SetupView: View {
     private var accessibility: some View {
         page(title: "Allow Accessibility Access",
              text: "macOS requires this before an app can type on the lock screen. Turn on FaceUnlock in System Settings › Privacy & Security › Accessibility.") {
-            Image(systemName: "accessibility").font(.system(size: 62)).foregroundStyle(.tint)
+            Image(systemName: "accessibility").font(.system(size: 62)).foregroundStyle(.tint).glassy()
         } buttons: {
             primary("Open Accessibility Settings") {
                 PasswordTyper.requestTrust()

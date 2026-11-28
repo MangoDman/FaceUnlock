@@ -16,10 +16,10 @@ struct UnlockPolicy: Equatable {
 
         var message: String {
             switch self {
-            case .afterLaunch: "Your password or Touch ID is required after FaceUnlock starts."
-            case .timedOut: "Your password or Touch ID is required because the time limit has passed."
-            case .tooManyAttempts: "Your password or Touch ID is required after too many unrecognized attempts."
-            case .typingFailed: "Automatic unlock didn’t work. Check your saved password."
+            case .afterLaunch: "FaceUnlock restarted. Use Touch ID or your password."
+            case .timedOut: "Time limit passed. Use Touch ID or your password."
+            case .tooManyAttempts: "Too many attempts. Use Touch ID or your password."
+            case .typingFailed: "Automatic unlock failed. Check your saved password."
             }
         }
     }

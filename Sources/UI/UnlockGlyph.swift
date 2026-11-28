@@ -6,6 +6,11 @@ import SwiftUI
 struct UnlockGlyph: View {
     var success: Bool
     var frozenAt: Double?
+    /// What the face is asking you to do, which it acts out.
+    var cue: FaceCue?
+    @State private var asked: (cue: FaceCue, at: Date)?
+    /// Where the face was when you were recognised, to ease back from.
+    @State private var heldPose = FaceGlyph.Pose()
     @State private var start = Date.now
     /// Seconds into the success, carried by SwiftUI's own animation.
     @State private var since = 0.0
@@ -30,14 +35,27 @@ struct UnlockGlyph: View {
         // One structure for looking and recognised, so nothing is exchanged mid-way.
         TimelineView(.animation(paused: success)) { timeline in
             let looking = frozenAt ?? (reduceMotion ? 0.26 : success ? held : timeline.date.timeIntervalSince(start))
-            Drawing(looking: looking, since: !success ? -1 : frozenAt != nil || reduceMotion ? 10 : since)
+            var pose = heldPose
+            if !success {
+                pose = FaceGlyph.Pose()
+                if frozenAt != nil || reduceMotion {
+                    pose = cue?.pose(at: FaceCue.still) ?? pose
+                } else if let asked {
+                    pose = asked.cue.pose(at: timeline.date.timeIntervalSince(asked.at))
+                }
+            }
+            return Drawing(looking: looking, since: !success ? -1 : frozenAt != nil || reduceMotion ? 10 : since, pose: pose)
         }
         .aspectRatio(1, contentMode: .fit)
         .accessibilityLabel(success ? "Recognized" : "Looking for you")
+        .onChange(of: cue, initial: true) { _, new in
+            if let new { asked = (new, .now) } else if !success { asked = nil }
+        }
         .onChange(of: success, initial: true) { _, done in
             since = 0
             guard done else { return }
             held = Date.now.timeIntervalSince(start)
+            heldPose = asked.map { $0.cue.pose(at: Date.now.timeIntervalSince($0.at)) } ?? FaceGlyph.Pose()
             withAnimation(.linear(duration: Beat.tickEnd * Theme.slowMotion)) { since = Beat.tickEnd }
         }
     }
@@ -46,6 +64,7 @@ struct UnlockGlyph: View {
     private struct Drawing: View, Animatable {
         var looking: Double
         var since: Double
+        var pose = FaceGlyph.Pose()
         var animatableData: Double {
             get { since }
             set { since = newValue }
@@ -53,7 +72,7 @@ struct UnlockGlyph: View {
 
         var body: some View {
             Canvas { context, size in
-                UnlockGlyph.draw(&context, size: size, looking: looking, since: since < 0 ? nil : since)
+                UnlockGlyph.draw(&context, size: size, looking: looking, since: since < 0 ? nil : since, pose: pose)
             }
         }
     }
@@ -70,7 +89,8 @@ struct UnlockGlyph: View {
     }
 
     /// `since` is nil while still looking.
-    static func draw(_ context: inout GraphicsContext, size: CGSize, looking: Double, since: Double?) {
+    static func draw(_ context: inout GraphicsContext, size: CGSize, looking: Double, since: Double?,
+                     pose turned: FaceGlyph.Pose = .init()) {
         let s = min(size.width, size.height)
         let c = CGPoint(x: size.width / 2, y: size.height / 2)
         func mix(_ a: CGFloat, _ b: CGFloat, _ t: CGFloat) -> CGFloat { a + (b - a) * t }
@@ -82,6 +102,8 @@ struct UnlockGlyph: View {
 
         let t = since ?? -1
         let settle = ease(t, 0, 0.25)
+        // A turned head comes back to face you as it is recognised.
+        let yaw = turned.yaw * (1 - settle)
         // A gentle turn the whole way; the arcs stay apart while they spin, then close.
         let spin = glide(t, 0, Beat.spin)
         let draw = glide(t, 0, Beat.joined)
@@ -101,8 +123,10 @@ struct UnlockGlyph: View {
             var arc = Path()
             arc.addArc(center: c, radius: arcRadius, startAngle: .degrees(middle - half),
                        endAngle: .degrees(middle + half), clockwise: false)
-            context.stroke(arc, with: .color(ringColor.opacity(mix(0.685, 1, draw))),
-                           style: StrokeStyle(lineWidth: mix(s * 0.0288 * 1.12, finalWidth, draw), lineCap: .round))
+            // The arc on the side being turned to lights up and thickens. (1 is right, 3 left.)
+            let lit = since == nil ? min(max(quarter == 3 ? yaw : quarter == 1 ? -yaw : 0, 0), 1) : 0
+            context.stroke(arc, with: .color(lit > 0.5 ? Theme.glow : ringColor.opacity(mix(0.685, 1, draw))),
+                           style: StrokeStyle(lineWidth: mix(s * 0.0288 * (1.12 + 0.9 * lit), finalWidth, draw), lineCap: .round))
         }
 
         // The head's circle swells out to meet them.
@@ -120,6 +144,8 @@ struct UnlockGlyph: View {
             face.scaleBy(x: mix(0.7, 1, fade), y: mix(0.7, 1, fade))
             face.translateBy(x: -c.x, y: -c.y)
             var pose = FaceGlyph.Pose()
+            pose.yaw = yaw
+            pose.blink = turned.blink
             pose.ringOpacity = 0
             pose.arcs = [-1, -1, -1, -1]
             FaceGlyph.draw(&face, size: size, pose: pose, color: Theme.deep.mix(with: Theme.glow, by: glint))

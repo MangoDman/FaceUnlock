@@ -273,7 +273,7 @@ struct GuideView: View {
     }
 
     private func symbol(_ name: String, _ colour: Color) -> some View {
-        Image(systemName: name).font(.system(size: 76)).foregroundStyle(colour).accessibilityHidden(true)
+        Image(systemName: name).font(.system(size: 76)).foregroundStyle(colour).glassy().accessibilityHidden(true)
     }
 
     private func dialog(_ icon: String, _ message: String, field: Bool = false, other: String, click: String) -> some View {
