@@ -112,7 +112,7 @@ The first time, FaceUnlock opens a **setup guide**: it walks through the camera,
   <img src="Screenshots/readme/guide-all-set.png" width="230" alt="You are all set">
 </p>
 
-1. Choose **Set Up Face Recognition** and complete the head-turn scan.
+1. Choose **Set Up Face Recognition**. Look left, right, up and down as it asks, face the screen, and press **Done** when the tick draws.
 2. Try **Settings → Face Unlock & Password → Test Recognition**. It types nothing and shows the match score.
 3. Enter your Mac password and allow **Accessibility** (and **Notifications** if you like).
 4. Turn on **Unlock with Front Camera** and confirm with Touch ID.
@@ -238,9 +238,9 @@ The website’s source is kept separately.
 
 ## Status
 
-**Confirmed** on one MacBook Pro, macOS 27.0.1: recognition, real lock-screen unlocks with the liveness, typing and animation code.
+**Confirmed** on one MacBook Pro, macOS 27.0.1: recognition, real lock-screen unlocks with the liveness, typing and animation code, and (1.9.1) the face setup scan, including one with glasses.
 
-**Not confirmed:** photo and video attempts against the liveness checks (tested on simulated data only), the Maximum challenge, the head-turn setup scan, glasses and hat scans, another person, dim light, lock-when-you-leave, a real time-limit expiry, Intel Macs, and Macs without a notch or with a Dynamic Island. Masks are not supported.
+**Not confirmed:** photo and video attempts against the liveness checks (tested on simulated data only), the Maximum challenge, hat scans, another person, dim light, lock-when-you-leave, a real time-limit expiry, Intel Macs, and Macs without a notch or with a Dynamic Island. Masks are not supported.
 
 ## Credits and licence
 
