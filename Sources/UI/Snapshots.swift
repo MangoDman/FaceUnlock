@@ -92,6 +92,10 @@ enum Snapshots {
                                message: "While your Mac was locked.")),
             ("prompt", .prompt(title: "Face Unlock Paused", message: UnlockPolicy.Reason.timedOut.message)),
         ]
+        // `--backdrop <picture>` puts a desktop behind each moment, as Settings previews do.
+        let arguments = CommandLine.arguments
+        let backdrop = arguments.firstIndex(of: "--backdrop")
+            .flatMap { $0 + 1 < arguments.count ? NSImage(contentsOfFile: arguments[$0 + 1]) : nil }
         // The three kinds of display, as chosen automatically, plus the styles picked by hand.
         for (variant, preference, kind) in [("expanded", NotchState.Preference.expanded, ScreenKind.notch),
                                             ("island", .automatic, .island), ("pill", .automatic, .plain),
@@ -105,7 +109,10 @@ enum Snapshots {
                 state.topInset = kind == .island ? 7 : 0
                 state.phase = phase
                 save("notch-\(variant)-\(name)", size: CGSize(width: 460, height: 300),
-                     NotchView(state: state, frozenAt: 0.4))
+                     ZStack(alignment: .top) {
+                         if let backdrop { PreviewBackdrop(wallpaper: backdrop).frame(width: 460, height: 300).clipped() }
+                         NotchView(state: state, frozenAt: 0.4)
+                     })
             }
         }
         #if DEBUG

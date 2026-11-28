@@ -1,4 +1,4 @@
-// Draws the icon's two layers. The Liquid Glass finish itself is
+// Draws the icon's layers. The Liquid Glass finish itself is
 // Apple's: Resources/AppIcon.icon is an Icon Composer document that macOS renders.
 // Usage: Tools/make_icon.sh
 import SwiftUI
@@ -20,6 +20,11 @@ struct MakeIcon {
                   let data = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])
             else { fatalError("render failed") }
             try data.write(to: URL(filePath: CommandLine.arguments[1]).appending(path: name))
+        }
+        // A sheet of glass over nearly the whole tile, lying on the matte green behind the face.
+        try save("sheet.png") { context in
+            context.fill(Path(roundedRect: CGRect(x: -7, y: -7, width: 114, height: 114), cornerRadius: 27.5, style: .continuous),
+                         with: .color(.white))
         }
         // Every number here was measured from the reference mark.
         let ink = GraphicsContext.Shading.color(.white)

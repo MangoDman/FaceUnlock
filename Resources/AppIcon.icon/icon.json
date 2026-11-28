@@ -1,21 +1,77 @@
 {
-  "fill-specializations" : [
-    { "value" : { "linear-gradient" : [ "display-p3:0.40000,0.88000,0.46000,1.00000", "display-p3:0.10000,0.62000,0.27000,1.00000" ], "orientation" : { "start" : { "x" : 0.5, "y" : 0 }, "stop" : { "x" : 0.5, "y" : 1 } } } },
-    { "appearance" : "dark", "value" : { "linear-gradient" : [ "display-p3:0.40000,0.88000,0.46000,1.00000", "display-p3:0.10000,0.62000,0.27000,1.00000" ], "orientation" : { "start" : { "x" : 0.5, "y" : 0 }, "stop" : { "x" : 0.5, "y" : 1 } } } }
-  ],
-  "groups" : [
+  "fill-specializations": [
     {
-      "layers" : [ { "glass" : true, "image-name" : "face.png", "name" : "face" } ],
-      "shadow" : { "kind" : "layer-color", "opacity" : 0.5 },
-      "specular" : true,
-      "translucency" : { "enabled" : false, "value" : 0 }
+      "value": {
+        "solid": "display-p3:0.20000,0.72000,0.35000,1.00000"
+      }
     },
     {
-      "layers" : [ { "glass" : false, "image-name" : "arcs.png", "name" : "arcs", "opacity" : 0.6 } ],
-      "shadow" : { "kind" : "none", "opacity" : 0 },
-      "specular" : false,
-      "translucency" : { "enabled" : false, "value" : 0 }
+      "appearance": "dark",
+      "value": {
+        "solid": "display-p3:0.20000,0.72000,0.35000,1.00000"
+      }
     }
   ],
-  "supported-platforms" : { "squares" : "shared" }
+  "groups": [
+    {
+      "layers": [
+        {
+          "glass": true,
+          "image-name": "face.png",
+          "name": "face"
+        }
+      ],
+      "shadow": {
+        "kind": "layer-color",
+        "opacity": 0.5
+      },
+      "specular": true,
+      "translucency": {
+        "enabled": true,
+        "value": 0.15
+      }
+    },
+    {
+      "layers": [
+        {
+          "glass": true,
+          "image-name": "arcs.png",
+          "name": "arcs",
+          "opacity": 0.75
+        }
+      ],
+      "shadow": {
+        "kind": "layer-color",
+        "opacity": 0.5
+      },
+      "specular": true,
+      "translucency": {
+        "enabled": true,
+        "value": 0.3
+      }
+    },
+    {
+      "layers": [
+        {
+          "glass": true,
+          "image-name": "sheet.png",
+          "name": "sheet",
+          "opacity": 0.16
+        }
+      ],
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.35
+      },
+      "specular": true,
+      "translucency": {
+        "enabled": true,
+        "value": 0.7
+      },
+      "blur-material": 0.3
+    }
+  ],
+  "supported-platforms": {
+    "squares": "shared"
+  }
 }
